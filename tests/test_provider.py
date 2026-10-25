@@ -1,8 +1,10 @@
 import subprocess
 import sys
 
-from nightjar.core.provider import GridWorldSimulation
-from nightjar.core.world import Direction, GridWorld
+import pytest
+
+from nightjar.core.provider import GridWorldSimulation, OperationalMode
+from nightjar.core.world import BlockReason, Direction, GridWorld
 
 
 def test_provider_exposes_public_grid_state_and_advances_one_step():
@@ -48,6 +50,74 @@ def test_fixed_seed_reproduces_provider_frames_and_steps():
         assert first.step() == second.step()
 
 
+def test_three_drones_start_distinct_with_expected_identities_and_modes():
+    frame = GridWorldSimulation(GridWorld(width=8, height=6, seed=42)).frame()
+
+    assert [(drone.identifier, drone.callsign) for drone in frame.drones] == [
+        ("01", "RAVEN"),
+        ("02", "GHOST"),
+        ("03", "VIPER"),
+    ]
+    assert len({drone.position for drone in frame.drones}) == 3
+    assert all(drone.position not in frame.obstacles for drone in frame.drones)
+    assert all(drone.mode is OperationalMode.MANUAL for drone in frame.drones)
+
+
+def test_drone_count_is_configurable_and_requires_enough_free_cells():
+    simulation = GridWorldSimulation(GridWorld(width=2, height=2, obstacles=()), drone_count=4)
+    assert len(simulation.frame().drones) == 4
+    assert len({drone.position for drone in simulation.frame().drones}) == 4
+
+    with pytest.raises(ValueError, match="enough free cells"):
+        GridWorldSimulation(GridWorld(width=2, height=2, obstacles=()), drone_count=5)
+    with pytest.raises(ValueError, match="between 1 and 10"):
+        GridWorldSimulation(GridWorld(width=20, height=20, obstacles=()), drone_count=11)
+
+
+def test_drone_movement_and_history_are_independent():
+    simulation = GridWorldSimulation(
+        GridWorld(width=5, height=4, obstacles=()),
+        directions=(Direction.EAST,),
+    )
+    before = simulation.frame()
+
+    after = simulation.step(Direction.EAST, drone_id="01")
+
+    assert before.drones[1:] == after.drones[1:]
+    assert after.drone("01").position == (1, 0)
+    assert after.drone("01").path == ((0, 0), (1, 0))
+    assert after.drone("01").visited == frozenset({(0, 0), (1, 0)})
+    assert after.drone("01").moves == 1
+    assert "01 RAVEN MOVED EAST" in after.events[-1]
+
+
+def test_drone_collision_blocks_step_without_changing_path_or_position():
+    simulation = GridWorldSimulation(
+        GridWorld(width=3, height=3, obstacles=()),
+        directions=(Direction.NORTH,),
+    )
+
+    simulation.step(Direction.NORTH, drone_id="02")
+    frame = simulation.step(Direction.SOUTH, drone_id="03")
+
+    assert frame.drone("02").position == (2, 1)
+    assert frame.drone("03").position == (2, 0)
+    assert frame.drone("03").last_result is not None
+    assert frame.drone("03").last_result.blocked_by is BlockReason.DRONE
+    assert frame.drone("03").path == ((2, 0),)
+    assert "DRONE COLLISION" in frame.events[-1]
+
+
+def test_non_manual_operational_modes_do_not_accept_manual_movement():
+    simulation = GridWorldSimulation(GridWorld(width=4, height=3, obstacles=()))
+    simulation.set_mode("02", OperationalMode.IDLE)
+
+    with pytest.raises(ValueError, match="not in MANUAL mode"):
+        simulation.step(Direction.WEST, drone_id="02")
+    assert simulation.frame().drone("02").mode is OperationalMode.IDLE
+    assert simulation.frame().drone("02").position == (3, 2)
+
+
 def test_core_provider_imports_without_textual_or_rich():
     script = """
 import importlib.abc
@@ -64,6 +134,7 @@ class RejectTuiImports(importlib.abc.MetaPathFinder):
 sys.meta_path.insert(0, RejectTuiImports())
 sys.path.insert(0, "src")
 import nightjar.core.provider
+import nightjar.core.mission
 import nightjar.core.world
 """
     subprocess.run(

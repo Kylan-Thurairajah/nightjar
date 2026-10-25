@@ -7,9 +7,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run the Nightjar simulation TUI.")
     parser.add_argument(
         "--mode",
-        choices=("demo", "gridworld"),
-        default="demo",
-        help="simulation to display (default: demo)",
+        choices=("mission", "demo", "gridworld"),
+        default="mission",
+        help="mission setup (default), original scripted demo, or direct GridWorld launch",
     )
     args = parser.parse_args()
 

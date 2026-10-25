@@ -46,19 +46,31 @@ class MapWidget(Static):
                 output.append("\n")
         self.update(output)
 
-    def show_gridworld_frame(self, frame: GridWorldFrame, layer: str = "terrain") -> None:
+    def show_gridworld_frame(
+        self,
+        frame: GridWorldFrame,
+        layer: str = "terrain",
+        selected_drone_id: str = "01",
+    ) -> None:
         output = Text(no_wrap=True, overflow="crop")
-        occupied = frame.position
-        path = set(frame.path)
+        occupied = {drone.position: drone for drone in frame.drones}
+        visited = set().union(*(drone.visited for drone in frame.drones))
+        path = set().union(*(set(drone.path) for drone in frame.drones))
 
         for y in range(frame.height):
             for x in range(frame.width):
                 point = (x, y)
-                if point == occupied:
-                    output.append("01", style="bold #06120b on #c6fac2")
+                drone = occupied.get(point)
+                if drone is not None:
+                    style = (
+                        "bold #06120b on #e0b45c"
+                        if drone.identifier == selected_drone_id
+                        else "bold #06120b on #74d9a2"
+                    )
+                    output.append(drone.identifier, style=style)
                 elif point in frame.obstacles:
                     output.append("▓▓", style="#6d8574")
-                elif layer == "coverage" and point in frame.visited:
+                elif layer == "coverage" and point in visited:
                     output.append("▒▒", style="#7bd49b")
                 elif layer == "paths" and point in path:
                     output.append("••", style="#a2d68f")

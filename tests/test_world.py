@@ -47,6 +47,22 @@ def test_obstacle_blocks_movement_without_changing_position():
     assert result.tick == 1
 
 
+def test_start_position_and_occupied_cell_are_handled_by_world_rules():
+    world = GridWorld(
+        width=3,
+        height=3,
+        obstacles=(),
+        start_position=(2, 2),
+    )
+
+    result = world.step(Direction.WEST, occupied_positions={(1, 2)})
+
+    assert not result.moved
+    assert result.position == (2, 2)
+    assert result.blocked_by is BlockReason.DRONE
+    assert result.tick == 1
+
+
 def test_invalid_action_raises_without_changing_world():
     world = GridWorld(width=3, height=3, obstacles=())
 
@@ -80,6 +96,8 @@ def test_same_seed_reproduces_obstacles_and_movement():
         {"width": 1, "height": 1, "obstacle_count": 1},
         {"obstacles": {(0, 0)}},
         {"width": 3, "height": 3, "obstacles": {(3, 0)}},
+        {"width": 3, "start_position": (3, 0)},
+        {"start_position": (0, 0, 1)},
     ],
 )
 def test_invalid_world_configuration_raises(kwargs):
