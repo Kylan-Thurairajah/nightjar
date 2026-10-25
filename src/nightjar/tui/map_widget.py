@@ -4,6 +4,7 @@ from rich.text import Text
 from textual.widgets import Static
 
 from nightjar.core.demo import SimulationFrame
+from nightjar.core.provider import GridWorldFrame
 
 # Near-black, desaturated green, yellow, amber; intended for true-color terminals.
 HEAT_COLORS = (
@@ -13,7 +14,7 @@ HEAT_COLORS = (
 
 
 class MapWidget(Static):
-    """Displays a complete fixed-size simulation frame as a Rich Text grid."""
+    """Displays demo frames or neutral GridWorld state as a Rich Text grid."""
 
     def show_frame(self, frame: SimulationFrame, layer: str, selected: int) -> None:
         output = Text(no_wrap=True, overflow="crop")
@@ -42,5 +43,27 @@ class MapWidget(Static):
                     index = min(int(intensity**0.8 * len(HEAT_COLORS)), len(HEAT_COLORS) - 1)
                     output.append("██" if index >= 2 else "░░", style=HEAT_COLORS[index])
             if y < frame.walls.shape[0] - 1:
+                output.append("\n")
+        self.update(output)
+
+    def show_gridworld_frame(self, frame: GridWorldFrame, layer: str = "terrain") -> None:
+        output = Text(no_wrap=True, overflow="crop")
+        occupied = frame.position
+        path = set(frame.path)
+
+        for y in range(frame.height):
+            for x in range(frame.width):
+                point = (x, y)
+                if point == occupied:
+                    output.append("01", style="bold #06120b on #c6fac2")
+                elif point in frame.obstacles:
+                    output.append("▓▓", style="#6d8574")
+                elif layer == "coverage" and point in frame.visited:
+                    output.append("▒▒", style="#7bd49b")
+                elif layer == "paths" and point in path:
+                    output.append("••", style="#a2d68f")
+                else:
+                    output.append("··", style="#31543c")
+            if y < frame.height - 1:
                 output.append("\n")
         self.update(output)

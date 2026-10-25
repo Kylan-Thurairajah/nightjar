@@ -1,12 +1,13 @@
 # The next single task
 
-Connect the deterministic `GridWorld` to a single-agent simulation provider that the TUI can consume, while leaving the existing scripted multi-agent demo available and clearly labeled.
+Implement Milestone 3B: Multiple Drone Support and Selection.
 
 Done when:
 
-- A typed frame from the provider exposes the agent position, grid obstacles, and simulation tick without exposing hidden data.
-- A TUI single-step action advances the world through `GridWorld.step` and never moves the agent into a wall or outside the grid.
-- The existing scripted demo and its tests continue to work unchanged.
-- Core simulation modules remain independent of Textual and Rich.
+- Add support for a small, fixed number of independently positioned virtual drones in the GridWorld simulation without adding autonomous planning.
+- Each drone's position, movement result, visited cells, and path are represented in simulation state independent of Textual.
+- The TUI displays each drone clearly and uses the existing `Tab` control to select the active drone for manual WASD movement.
+- Movement and collision results remain routed through `GridWorld.step()` semantics, with tests for selection, independent movement, collisions, and reproducibility.
+- Existing demo mode remains functional.
 
-Keep the synthetic belief field labeled as a demo; do not add inference, planning, persistence, or networking.
+Do not add sensors, Bayesian inference, networking, persistence, or new frameworks.

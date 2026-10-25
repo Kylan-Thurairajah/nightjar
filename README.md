@@ -6,9 +6,9 @@ The project is simulation-only: it does not control real drones or connect to ph
 
 ## Current status
 
-The current Textual TUI is a visual prototype featuring a 32×16 grid, three virtual agents following scripted routes, obstacle symbols, telemetry, event log, timeline controls, and map overlays for a synthetic heatmap, visited cells, and paths. The heatmap is illustrative display data, not Bayesian inference; routes and statuses are scripted. Replay recalculates demo frames rather than reading a persistent event log.
+The default Textual TUI is a visual demo featuring a 32×16 grid, three virtual agents following scripted routes, obstacle symbols, telemetry, event log, timeline controls, and map overlays for a synthetic heatmap, visited cells, and paths. The heatmap is illustrative display data, not Bayesian inference; routes and statuses are scripted. Replay recalculates demo frames rather than reading a persistent event log.
 
-Separately, `nightjar.core.world.GridWorld` provides a deterministic single-agent grid with configurable dimensions, seeded obstacle placement, cardinal movement, and explicit boundary and obstacle collision results. It is covered by unit tests but is not yet connected to the TUI. The demo and GridWorld should not be interpreted as autonomous planning or real-world sensing.
+The optional GridWorld TUI mode connects the deterministic single-agent `GridWorld` simulation to a neutral map and displays actual position, obstacles, tick, and movement results. `GridWorld` provides configurable dimensions, seeded obstacle placement, cardinal movement, and explicit boundary and obstacle collision results. Neither mode implements autonomous planning or real-world sensing.
 
 ## Requirements
 
@@ -24,6 +24,7 @@ Separately, `nightjar.core.world.GridWorld` provides a deterministic single-agen
 py -3 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 .\.venv\Scripts\python.exe -m nightjar
+.\.venv\Scripts\python.exe -m nightjar --mode gridworld
 ```
 
 ### macOS / Linux
@@ -32,6 +33,7 @@ py -3 -m venv .venv
 python3 -m venv .venv
 .venv/bin/python -m pip install -e '.[dev]'
 .venv/bin/python -m nightjar
+.venv/bin/python -m nightjar --mode gridworld
 ```
 
 After installation, the `nightjar` command is also available in the environment.
@@ -40,14 +42,15 @@ After installation, the `nightjar` command is also available in the environment.
 
 | Key | Action |
 | --- | --- |
-| `Space` | Play or pause |
-| `N` | Advance one demo tick |
-| `H` | Show the synthetic heatmap |
+| `Space` | Play or pause (demo mode) |
+| `N` | Advance one demo tick, or the next predefined GridWorld move |
+| `W` / `A` / `S` / `D` | Move north / west / south / east one cell in GridWorld mode |
+| `H` | Show the synthetic heatmap in demo mode; neutral terrain in GridWorld mode |
 | `C` | Show visited cells |
 | `P` | Show agent paths |
-| `Tab` | Select the next agent |
-| `R` | Enter or exit replay mode |
-| `Left` / `Right` | Seek in replay mode |
+| `Tab` | Select the next agent (demo mode) |
+| `R` | Enter or exit replay mode (demo mode) |
+| `Left` / `Right` | Seek in replay mode (demo mode) |
 | `Q` | Quit |
 
 ## Tests
@@ -62,9 +65,8 @@ If the project is not installed in the active Python environment, install it wit
 
 ## Roadmap
 
-1. Connect `GridWorld` to a typed single-agent simulation provider and a TUI step action, retaining the clearly labeled scripted demo.
-2. Add synthetic proximity sensing and test a normalized Bayesian belief map.
-3. Add and evaluate simple search baselines before considering information-gain planning.
-4. Add deterministic event records and snapshot-based replay.
+1. Add a synthetic proximity sensor and test a normalized Bayesian belief map, keeping observations separate from hidden world state.
+2. Add and evaluate simple search baselines before considering information-gain planning.
+3. Add deterministic event records and snapshot-based replay.
 
 Persistence or remote services will be considered only if a concrete requirement justifies them.
