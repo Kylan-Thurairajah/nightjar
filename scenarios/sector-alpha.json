@@ -1,0 +1,8 @@
+{
+  "name": "Sector Alpha",
+  "grid_width": 32,
+  "grid_height": 16,
+  "agents": ["RAVEN", "GHOST", "VIPER"],
+  "description": "Illustrative configuration for the Nightjar TUI prototype. Not yet loaded by the simulator.",
+  "seed": 42
+}

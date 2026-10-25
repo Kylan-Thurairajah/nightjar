@@ -1,0 +1,98 @@
+Screen {
+    background: #080f0c;
+    color: #a7d4b4;
+}
+
+#masthead {
+    height: 3;
+    background: #102019;
+    border-bottom: solid #2a563d;
+    color: #b8f1c2;
+    text-style: bold;
+    content-align: left middle;
+    padding: 0 1;
+}
+
+#workspace {
+    height: 1fr;
+    min-height: 19;
+}
+
+#map_panel {
+    width: 1fr;
+    min-width: 66;
+    border-right: solid #2b4c38;
+    padding: 0 1;
+}
+
+#telemetry_panel {
+    width: 32;
+    padding: 0 1;
+    background: #0c1812;
+}
+
+.section_title {
+    height: 2;
+    color: #89c998;
+    text-style: bold;
+    padding-top: 1;
+}
+
+#map {
+    height: 1fr;
+    overflow: auto;
+    background: #0a1510;
+    padding: 1 1;
+}
+
+#legend {
+    height: 2;
+    color: #90b99e;
+    padding-top: 1;
+}
+
+#agents {
+    height: 1fr;
+    padding: 1 0 0 0;
+    color: #add7b6;
+}
+
+#metrics {
+    height: 8;
+    padding-top: 1;
+    color: #b6d5b2;
+}
+
+#bottom_panels {
+    height: 11;
+    border-top: solid #2b4c38;
+}
+
+#events_panel {
+    width: 1fr;
+    padding: 0 1;
+}
+
+#replay_panel {
+    width: 37;
+    border-left: solid #2b4c38;
+    padding: 0 1;
+}
+
+#events, #timeline {
+    height: 1fr;
+    color: #9ec4a6;
+    padding-top: 1;
+}
+
+#mode_note {
+    height: 1;
+    background: #102019;
+    color: #78a98c;
+    padding-left: 1;
+}
+
+Footer {
+    background: #122719;
+    color: #b6e7bd;
+}
