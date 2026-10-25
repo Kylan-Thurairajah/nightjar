@@ -8,14 +8,16 @@ from textual.containers import Horizontal, Vertical
 from textual.widgets import Footer, Static
 
 from nightjar.core.demo import DemoSimulation, MAX_TICK
+from nightjar.core.mission import MissionConfig, create_simulation
 from nightjar.core.provider import GridWorldFrame, GridWorldSimulation
 from nightjar.core.world import Direction
 from nightjar.tui.map_widget import MapWidget
+from nightjar.tui.mission_screens import MissionConfigScreen
 
 
 class NightjarApp(App[None]):
     TITLE = "NIGHTJAR"
-    SUB_TITLE = "AUTONOMOUS SEARCH / SIM LAB / DEMO"
+    SUB_TITLE = "MISSION CONFIGURATION / SIM LAB"
     CSS_PATH = "nightjar.tcss"
 
     BINDINGS = [
@@ -28,7 +30,12 @@ class NightjarApp(App[None]):
         Binding("h", "layer('belief')", "Heatmap"),
         Binding("c", "layer('coverage')", "Coverage"),
         Binding("p", "layer('paths')", "Paths"),
-        Binding("tab", "next_agent", "Select agent", show=False),
+        Binding("tab", "next_agent", "Next drone", priority=True),
+        Binding("1", "select_drone('01')", "RAVEN"),
+        Binding("2", "select_drone('02')", "GHOST"),
+        Binding("3", "select_drone('03')", "VIPER"),
+        Binding("m", "set_control('MANUAL')", "Manual control"),
+        Binding("i", "set_control('IDLE')", "Idle control"),
         Binding("r", "toggle_replay", "Replay"),
         Binding("left", "seek(-1)", "Back", show=False),
         Binding("right", "seek(1)", "Forward", show=False),
@@ -37,20 +44,31 @@ class NightjarApp(App[None]):
 
     def __init__(
         self,
-        mode: Literal["demo", "gridworld"] = "demo",
+        mode: Literal["mission", "demo", "gridworld"] = "mission",
         gridworld_simulation: GridWorldSimulation | None = None,
+        mission_config: MissionConfig | None = None,
     ) -> None:
         super().__init__()
-        if mode not in {"demo", "gridworld"}:
+        if mode not in {"mission", "demo", "gridworld"}:
             raise ValueError(f"unsupported simulation mode: {mode!r}")
-        self.mode = mode
+        self.mode = "demo" if mode == "demo" else "gridworld"
+        self._show_configuration = mode == "mission" and mission_config is None
+        self.mission_config = mission_config or MissionConfig()
         self.sim = DemoSimulation()
-        self.gridworld_simulation = gridworld_simulation or GridWorldSimulation()
+        self.gridworld_simulation = (
+            gridworld_simulation
+            if gridworld_simulation is not None
+            else create_simulation(self.mission_config)
+        )
         self.tick = 0
         self.playing = False
         self.replay_mode = False
-        self.layer = "terrain" if mode == "gridworld" else "belief"
+        self.layer = "terrain" if self.mode == "gridworld" else "belief"
         self.selected_agent = 0
+        self.selected_drone_id = "01"
+        initial_events = self.gridworld_simulation.frame().events
+        self._ui_events = list(initial_events)
+        self._seen_provider_events = set(initial_events)
 
     def compose(self) -> ComposeResult:
         mode_label = "GRIDWORLD MODE" if self.mode == "gridworld" else "DEMO MODE"
@@ -66,13 +84,14 @@ class NightjarApp(App[None]):
                     else "PROBABILITY GRID"
                 )
                 yield Static(
-                    f" ┌ SECTOR ALPHA / {map_label}                       32 × 16",
+                    f" ┌ SECTOR ALPHA / {map_label}                       "
+                    f"{self.mission_config.width} × {self.mission_config.height}",
                     id="map_title",
                     classes="section_title",
                 )
                 yield MapWidget(id="map")
                 legend = (
-                    " ▓▓ OBSTACLE  01 AGENT  WASD MOVE  [H] TERRAIN  [C] COVER  [P] PATH"
+                    " ▓▓ WALL  01-10 DRONES  WASD MOVE  [H] TERRAIN  [C] COVER  [P] PATH"
                     if self.mode == "gridworld"
                     else " LOW  ░░  ▒▒  ██   ▓▓ WALL     01 DRONE     [H] HEAT  [C] COVER  [P] PATH"
                 )
@@ -80,7 +99,8 @@ class NightjarApp(App[None]):
             with Vertical(id="telemetry_panel"):
                 yield Static("┌ AGENT TELEMETRY", classes="section_title")
                 yield Static(id="agents")
-                yield Static("┌ BELIEF STATE", classes="section_title")
+                status_title = "┌ SELECTED DRONE" if self.mode == "gridworld" else "┌ BELIEF STATE"
+                yield Static(status_title, classes="section_title")
                 yield Static(id="metrics")
         with Horizontal(id="bottom_panels"):
             with Vertical(id="events_panel"):
@@ -90,7 +110,7 @@ class NightjarApp(App[None]):
                 yield Static("┌ MISSION REPLAY", classes="section_title")
                 yield Static(id="timeline")
         mode_note = (
-            " GRIDWORLD  •  Deterministic single-agent movement  •  No sensing or belief map"
+            " GRIDWORLD  •  WASD move  Tab/1-3 select  •  No sensing or belief map"
             if self.mode == "gridworld"
             else " TERMINAL-FIRST PROTOTYPE  •  Synthetic belief field, scripted agent routes  •  No external sensors"
         )
@@ -100,6 +120,26 @@ class NightjarApp(App[None]):
     def on_mount(self) -> None:
         self.set_interval(0.22, self._timer_tick)
         self._refresh_screen()
+        if self._show_configuration:
+            self.push_screen(
+                MissionConfigScreen(self.mission_config),
+                self._on_mission_configured,
+            )
+
+    def _on_mission_configured(self, config: MissionConfig | None) -> None:
+        if config is None:
+            return
+        self.mission_config = config
+        self.gridworld_simulation = create_simulation(config)
+        self.mode = "gridworld"
+        self.tick = 0
+        self.playing = False
+        self.selected_drone_id = "01"
+        self.layer = "terrain"
+        initial_events = self.gridworld_simulation.frame().events
+        self._ui_events = list(initial_events)
+        self._seen_provider_events = set(initial_events)
+        self._refresh_screen()
 
     def _timer_tick(self) -> None:
         if self.playing:
@@ -107,6 +147,12 @@ class NightjarApp(App[None]):
             if self.tick == MAX_TICK:
                 self.playing = False
             self._refresh_screen()
+
+    def action_set_control(self, mode: str) -> None:
+        if self.mode != "gridworld":
+            return
+        self.gridworld_simulation.set_mode(self.selected_drone_id, mode)
+        self._refresh_screen()
 
     def _refresh_screen(self) -> None:
         if self.mode == "gridworld":
@@ -149,43 +195,72 @@ class NightjarApp(App[None]):
 
     def _refresh_gridworld_screen(self, frame: GridWorldFrame) -> None:
         self.tick = frame.tick
-        self.query_one("#map", MapWidget).show_gridworld_frame(frame, self.layer)
+        selected = frame.drone(self.selected_drone_id)
+        self.query_one("#map", MapWidget).show_gridworld_frame(
+            frame,
+            self.layer,
+            self.selected_drone_id,
+        )
         layer_labels = {
             "terrain": "NEUTRAL TERRAIN",
             "coverage": "VISITED CELLS",
             "paths": "TRAVEL HISTORY",
         }
         self.query_one("#map_title", Static).update(
-            f" ┌ SECTOR ALPHA / {layer_labels[self.layer]}                       "
+            f" ┌ {frame.mission_id} / {layer_labels[self.layer]}                       "
             f"{frame.width} × {frame.height}"
         )
-        self.query_one("#agents", Static).update(
-            " ▶ AGENT 01 / GRID\n"
-            f"   POSITION  ({frame.position[0]:02d},{frame.position[1]:02d})\n"
-            "   STATUS    VIRTUAL"
+        self.query_one("#masthead", Static).update(
+            f" ◈ NIGHTJAR    /  {frame.mission_id}     /  GRIDWORLD MISSION"
         )
-        if frame.last_result is None or frame.last_direction is None:
+        self.query_one("#mode_note", Static).update(
+            f" {frame.operation_name}  •  {frame.scenario.replace('_', ' ').upper()}  "
+            f"•  SEED {frame.seed}"
+        )
+        telemetry: list[str] = []
+        for drone in frame.drones:
+            marker = "▶" if drone.identifier == self.selected_drone_id else " "
+            telemetry.append(
+                f" {marker} [{drone.identifier}] {drone.callsign}  {drone.mode.value}"
+            )
+            telemetry.append(
+                f"   ({drone.position[0]:02d},{drone.position[1]:02d})  "
+                f"MOVES {drone.moves:03d}"
+            )
+        self.query_one("#agents", Static).update("\n".join(telemetry))
+        if selected.last_result is None or selected.last_direction is None:
             movement = "NOT STARTED"
-        elif frame.last_result.moved:
-            movement = f"MOVED {frame.last_direction.value.upper()}"
+        elif selected.last_result.moved:
+            movement = f"MOVED {selected.last_direction.value.upper()}"
         else:
-            reason = frame.last_result.blocked_by
+            reason = selected.last_result.blocked_by
             if reason is None:
                 raise RuntimeError("blocked GridWorld step did not include a reason")
             reason_label = "WALL" if reason.value == "obstacle" else reason.value.upper()
+            if reason.value == "drone":
+                reason_label = "DRONE COLLISION"
             movement = f"BLOCKED BY {reason_label}"
         self.query_one("#metrics", Static).update(
             f" GRID        {frame.width:3d} × {frame.height:<3d}\n"
-            f" POSITION    ({frame.position[0]:02d},{frame.position[1]:02d})\n"
-            f" OBSTACLES   {len(frame.obstacles):5d}\n"
+            f" SELECTED    {selected.identifier} {selected.callsign}\n"
+            f" POSITION    ({selected.position[0]:02d},{selected.position[1]:02d})\n"
+            f" STATUS      {selected.mode.value}\n"
+            f" MOVES       {selected.moves:5d}\n"
             f" TICK        {frame.tick:5d}\n"
+            f" BUDGET      {frame.max_ticks if frame.max_ticks is not None else 'OPEN'}\n"
+            f" MISSION     {frame.status.value}\n"
             f" RESULT      {movement}"
         )
-        self.query_one("#events", Static).update("\n".join(frame.events))
+        for event in frame.events:
+            if event not in self._seen_provider_events:
+                self._ui_events.append(event)
+        self._seen_provider_events = set(frame.events)
+        self.query_one("#events", Static).update("\n".join(self._ui_events[-8:]))
         self.query_one("#timeline", Static).update(
             f" GRIDWORLD  /  TICK {frame.tick:04d}\n\n"
             f" LAST ACTION: {movement}\n\n"
-            " [dim]WASD move  H terrain  C coverage  P path[/dim]"
+            f" STATUS: {frame.status.value}\n"
+            " [dim]Tab / 1-3 select  WASD move  M manual  I idle[/dim]"
         )
 
     def action_toggle_play(self) -> None:
@@ -200,7 +275,15 @@ class NightjarApp(App[None]):
     def action_step(self) -> None:
         if self.mode == "gridworld":
             self.playing = False
-            self.gridworld_simulation.step()
+            selected = self.gridworld_simulation.frame().drone(self.selected_drone_id)
+            if selected.mode.value != "MANUAL":
+                self._ui_events.append(
+                    f"[{self.tick:04d}]  {selected.identifier} {selected.callsign} "
+                    "MOVEMENT DENIED / NOT MANUAL"
+                )
+                self._refresh_screen()
+                return
+            self.gridworld_simulation.step(drone_id=self.selected_drone_id)
             self._refresh_screen()
             return
         self.playing = False
@@ -209,8 +292,38 @@ class NightjarApp(App[None]):
 
     def action_move(self, direction: str) -> None:
         if self.mode == "gridworld":
-            self.gridworld_simulation.step(Direction(direction))
+            selected = self.gridworld_simulation.frame().drone(self.selected_drone_id)
+            if selected.mode.value != "MANUAL":
+                self._ui_events.append(
+                    f"[{self.tick:04d}]  {selected.identifier} {selected.callsign} "
+                    "MOVEMENT DENIED / NOT MANUAL"
+                )
+                self._refresh_screen()
+                return
+            self.gridworld_simulation.step(
+                Direction(direction),
+                drone_id=self.selected_drone_id,
+            )
             self._refresh_screen()
+
+    def action_select_drone(self, drone_id: str) -> None:
+        if self.mode == "gridworld":
+            frame = self.gridworld_simulation.frame()
+            try:
+                drone = frame.drone(drone_id)
+            except KeyError:
+                return
+            if drone.identifier != self.selected_drone_id:
+                self.selected_drone_id = drone.identifier
+                self._ui_events.append(
+                    f"[{frame.tick:04d}]  SELECTED {drone.identifier} {drone.callsign}"
+                )
+                self._refresh_screen()
+        else:
+            index = int(drone_id) - 1
+            if 0 <= index < 3:
+                self.selected_agent = index
+                self._refresh_screen()
 
     def action_layer(self, layer: str) -> None:
         if self.mode == "demo" and layer in {"belief", "coverage", "paths"}:
@@ -225,6 +338,10 @@ class NightjarApp(App[None]):
 
     def action_next_agent(self) -> None:
         if self.mode == "gridworld":
+            drones = self.gridworld_simulation.frame().drones
+            identifiers = [drone.identifier for drone in drones]
+            next_index = (identifiers.index(self.selected_drone_id) + 1) % len(identifiers)
+            self.action_select_drone(identifiers[next_index])
             return
         self.selected_agent = (self.selected_agent + 1) % 3
         self._refresh_screen()

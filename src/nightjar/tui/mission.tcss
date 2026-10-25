@@ -1,0 +1,247 @@
+Screen {
+    background: #080f0c;
+    color: #a7d4b4;
+}
+
+.mission_header {
+    height: 3;
+    background: #102019;
+    border-bottom: solid #2a563d;
+    color: #b8f1c2;
+    text-style: bold;
+    content-align: left middle;
+    padding: 0 2;
+}
+
+#config_panel, #preflight_panel {
+    width: 92%;
+    max-width: 104;
+    height: auto;
+    border: solid #3c7750;
+    background: #0c1812;
+    padding: 1 3;
+}
+
+#config_scroll, #preflight_scroll {
+    height: 1fr;
+    scrollbar-color: #3c7750;
+    scrollbar-color-hover: #6aa778;
+}
+
+.mission_footer {
+    height: 1;
+    background: #102019;
+    color: #78a98c;
+    padding-left: 1;
+}
+
+#config_scroll:focus, #preflight_scroll:focus {
+    border: none;
+}
+
+#config_actions, #preflight_actions {
+    width: 92%;
+    max-width: 104;
+    height: auto;
+    padding-top: 1;
+}
+
+#config_actions Button {
+    margin-top: 0;
+}
+
+.group_title {
+    height: 2;
+    margin-top: 2;
+    border-bottom: solid #2b4c38;
+    color: #e0b45c;
+    text-style: bold;
+    padding-bottom: 1;
+}
+
+Label {
+    color: #9ec4a6;
+    margin-top: 1;
+    margin-bottom: 0;
+}
+
+Input {
+    height: 3;
+    border: tall #31543c;
+    background: #0a1510;
+    color: #b8f1c2;
+}
+
+Input:focus {
+    border: tall #e0b45c;
+    background: #102019;
+    background-tint: #e0b45c 5%;
+    color: #e2f2e4;
+}
+
+Input > .input--cursor {
+    background: #e0b45c;
+    color: #080f0c;
+}
+
+Input > .input--selection {
+    background: #31543c;
+}
+
+#drone_count {
+    height: 3;
+    border: tall #31543c;
+    background: #0a1510;
+    padding: 0 1;
+    content-align: left middle;
+}
+
+#drone_count:focus {
+    border: tall #e0b45c;
+    background: #102019;
+}
+
+.option_set {
+    layout: horizontal;
+    height: auto;
+    width: 1fr;
+    border: tall #31543c;
+    background: #0a1510;
+    padding: 0 1;
+    margin-top: 0;
+}
+
+.option_set:focus {
+    border: tall #e0b45c;
+    background: #102019;
+    background-tint: #e0b45c 4%;
+}
+
+.option_set > RadioButton {
+    width: auto;
+    min-width: 1;
+    height: 3;
+    padding: 0 1;
+    border: tall transparent;
+    background: transparent;
+    color: #9ec4a6;
+}
+
+.option_set > RadioButton.-on {
+    color: #e0b45c;
+    text-style: bold;
+}
+
+.option_set > RadioButton > .toggle--button {
+    color: #6e8f77;
+    background: #102019;
+}
+
+.option_set > RadioButton.-on > .toggle--button {
+    color: #e0b45c;
+    background: #244a34;
+}
+
+.option_set:focus > RadioButton.-selected > .toggle--label {
+    color: #f0d28c;
+    background: #183222;
+    text-style: bold;
+}
+
+.option_set:focus > RadioButton.-selected.-on > .toggle--label {
+    color: #fff0c7;
+    background: #31543c;
+}
+
+.option_set:blur > RadioButton.-selected > .toggle--label {
+    color: #e0b45c;
+    background: #183222;
+}
+
+.option_set > RadioButton:hover > .toggle--label {
+    color: #d5e8d8;
+    background: #172b20;
+}
+
+.field_row {
+    height: auto;
+    width: 1fr;
+    align: left top;
+}
+
+.half_field {
+    width: 1fr;
+    padding-right: 2;
+}
+
+Button {
+    width: 1fr;
+    margin-top: 2;
+    background: #183222;
+    color: #c4e9c9;
+    border: tall #3c7750;
+}
+
+.button_row {
+    height: auto;
+    width: 1fr;
+    layout: horizontal;
+    padding-top: 1;
+}
+
+.button_row Button {
+    margin-top: 0;
+}
+
+Button.-primary, Button.-success, Button.-warning {
+    background: #183222;
+    color: #c4e9c9;
+    border: tall #3c7750;
+}
+
+Button.-primary:hover, Button.-success:hover, Button.-warning:hover {
+    background: #244a34;
+    color: #e0b45c;
+    border: tall #6aa778;
+}
+
+Button.-primary:focus, Button.-success:focus, Button.-warning:focus {
+    background: #31543c;
+    color: #fff0c7;
+    border: tall #e0b45c;
+}
+
+Button:focus {
+    background: #31543c;
+    color: #fff0c7;
+    border: tall #e0b45c;
+}
+
+Button:hover {
+    background: #244a34;
+    color: #e0b45c;
+    border: tall #6aa778;
+}
+
+Button.-active {
+    background: #102019;
+    color: #e0b45c;
+    border: tall #e0b45c;
+}
+
+#mission_summary, #validation_results {
+    height: auto;
+    padding: 1;
+    background: #0a1510;
+    color: #b6d5b2;
+}
+
+#form_error, #preflight_error {
+    height: auto;
+    color: #e0b45c;
+    padding: 1 0;
+}
+
+#form_error {
+    color: #e0b45c;
+}

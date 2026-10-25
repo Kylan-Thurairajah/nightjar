@@ -20,6 +20,7 @@ class Direction(str, Enum):
 class BlockReason(str, Enum):
     BOUNDARY = "boundary"
     OBSTACLE = "obstacle"
+    DRONE = "drone"
 
 
 @dataclass(frozen=True)
@@ -31,7 +32,7 @@ class StepResult:
 
 
 class GridWorld:
-    """A rectangular grid with seeded obstacles and one agent at the origin."""
+    """A rectangular grid with seeded obstacles and one agent at its start position."""
 
     _DELTAS = {
         Direction.NORTH: (0, -1),
@@ -48,6 +49,7 @@ class GridWorld:
         *,
         obstacle_count: int | None = None,
         obstacles: Iterable[Position] | None = None,
+        start_position: Position = (0, 0),
     ) -> None:
         if type(width) is not int or width < 1:
             raise ValueError("width must be a positive integer")
@@ -55,6 +57,14 @@ class GridWorld:
             raise ValueError("height must be a positive integer")
         if type(seed) is not int:
             raise ValueError("seed must be an integer")
+        if (
+            not isinstance(start_position, tuple)
+            or len(start_position) != 2
+            or any(type(coordinate) is not int for coordinate in start_position)
+        ):
+            raise ValueError("start_position must be an integer (x, y) coordinate tuple")
+        if not (0 <= start_position[0] < width and 0 <= start_position[1] < height):
+            raise ValueError(f"start position {start_position!r} is outside the grid")
         if obstacle_count is not None and (
             type(obstacle_count) is not int or obstacle_count < 0
         ):
@@ -65,14 +75,14 @@ class GridWorld:
         self._width = width
         self._height = height
         self._seed = seed
-        self._position: Position = (0, 0)
+        self._position = start_position
         self._tick = 0
 
         available = [
             (x, y)
             for y in range(height)
             for x in range(width)
-            if (x, y) != self._position
+            if (x, y) != start_position
         ]
         if obstacles is not None:
             selected = set(obstacles)
@@ -86,8 +96,8 @@ class GridWorld:
                 x, y = position
                 if not (0 <= x < width and 0 <= y < height):
                     raise ValueError(f"obstacle position {position!r} is outside the grid")
-                if position == self._position:
-                    raise ValueError("the agent's starting position cannot be an obstacle")
+                if position == start_position:
+                    raise ValueError("the starting position cannot be an obstacle")
         else:
             if obstacle_count is None:
                 obstacle_count = min(len(available), width * height // 12)
@@ -121,14 +131,20 @@ class GridWorld:
     def tick(self) -> int:
         return self._tick
 
-    def step(self, direction: Direction | str) -> StepResult:
-        """Attempt one cardinal move; blocked valid actions still advance the tick."""
+    def step(
+        self,
+        direction: Direction | str,
+        *,
+        occupied_positions: Iterable[Position] = (),
+    ) -> StepResult:
+        """Attempt one cardinal move, optionally blocking cells occupied by other drones."""
         try:
             action = Direction(direction)
         except (TypeError, ValueError) as error:
             raise ValueError(f"unsupported direction: {direction!r}") from error
 
         dx, dy = self._DELTAS[action]
+        occupied = frozenset(occupied_positions)
         x, y = self._position
         destination = (x + dx, y + dy)
         reason: BlockReason | None = None
@@ -136,6 +152,8 @@ class GridWorld:
             reason = BlockReason.BOUNDARY
         elif destination in self._obstacles:
             reason = BlockReason.OBSTACLE
+        elif destination in occupied:
+            reason = BlockReason.DRONE
         else:
             self._position = destination
 

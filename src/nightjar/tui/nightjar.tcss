@@ -55,10 +55,11 @@ Screen {
     height: 1fr;
     padding: 1 0 0 0;
     color: #add7b6;
+    overflow: auto;
 }
 
 #metrics {
-    height: 8;
+    height: 10;
     padding-top: 1;
     color: #b6d5b2;
 }
