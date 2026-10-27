@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from nightjar.core.provider import GridWorldSimulation, OperationalMode
+from nightjar.core.sensor import SensorConfig, SensorPreset
 from nightjar.core.world import GridWorld
 
 
@@ -38,6 +39,7 @@ class MissionConfig:
     initial_control: OperationalMode = OperationalMode.MANUAL
     max_ticks: int = 500
     seed: int = 0
+    sensor_preset: SensorPreset = SensorPreset.STANDARD
 
     @property
     def mission_id(self) -> str:
@@ -150,6 +152,15 @@ def validate_mission_config(config: MissionConfig) -> tuple[ValidationCheck, ...
             else "Seed must be a nonnegative integer.",
         )
     )
+    checks.append(
+        ValidationCheck(
+            "Sensor preset",
+            isinstance(config.sensor_preset, SensorPreset),
+            "Supported synthetic sensor reliability preset."
+            if isinstance(config.sensor_preset, SensorPreset)
+            else "Select a supported sensor reliability preset.",
+        )
+    )
 
     foundational_checks_pass = all(check.passed for check in checks)
     if not foundational_checks_pass:
@@ -171,6 +182,7 @@ def validate_mission_config(config: MissionConfig) -> tuple[ValidationCheck, ...
             max_ticks=config.max_ticks,
             operation_name=config.operation_name,
             scenario=config.scenario.value,
+            sensor_config=SensorConfig.from_preset(config.sensor_preset),
         )
     except ValueError as error:
         checks.append(ValidationCheck("Spawn capacity", False, str(error)))
@@ -198,4 +210,5 @@ def create_simulation(config: MissionConfig) -> GridWorldSimulation:
         max_ticks=config.max_ticks,
         operation_name=config.operation_name,
         scenario=config.scenario.value,
+        sensor_config=SensorConfig.from_preset(config.sensor_preset),
     )

@@ -63,13 +63,19 @@ def test_three_drones_start_distinct_with_expected_identities_and_modes():
     assert all(drone.mode is OperationalMode.MANUAL for drone in frame.drones)
 
 
-def test_drone_count_is_configurable_and_requires_enough_free_cells():
-    simulation = GridWorldSimulation(GridWorld(width=2, height=2, obstacles=()), drone_count=4)
-    assert len(simulation.frame().drones) == 4
-    assert len({drone.position for drone in simulation.frame().drones}) == 4
+def test_drone_count_preserves_a_free_cell_for_the_hidden_objective():
+    simulation = GridWorldSimulation(
+        GridWorld(width=2, height=2, obstacles=()),
+        drone_count=3,
+    )
+    assert len(simulation.frame().drones) == 3
+    assert len({drone.position for drone in simulation.frame().drones}) == 3
+    assert simulation.debug_objective_position() not in {
+        drone.position for drone in simulation.frame().drones
+    }
 
     with pytest.raises(ValueError, match="enough free cells"):
-        GridWorldSimulation(GridWorld(width=2, height=2, obstacles=()), drone_count=5)
+        GridWorldSimulation(GridWorld(width=2, height=2, obstacles=()), drone_count=4)
     with pytest.raises(ValueError, match="between 1 and 10"):
         GridWorldSimulation(GridWorld(width=20, height=20, obstacles=()), drone_count=11)
 

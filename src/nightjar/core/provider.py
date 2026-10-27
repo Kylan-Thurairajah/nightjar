@@ -6,6 +6,13 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Iterable
 
+from nightjar.core.belief import BeliefMap, BeliefSnapshot, BeliefStats
+from nightjar.core.sensor import (
+    Observation,
+    ProximitySensor,
+    SensorConfig,
+    SensorType,
+)
 from nightjar.core.world import BlockReason, Direction, GridWorld, Position, StepResult
 
 
@@ -141,6 +148,7 @@ class GridWorldSimulation:
         max_ticks: int | None = None,
         operation_name: str = "GRIDWORLD",
         scenario: str = "obstacle_field",
+        sensor_config: SensorConfig | None = None,
     ) -> None:
         if type(drone_count) is not int or not 1 <= drone_count <= len(DRONE_CALLSIGNS):
             raise ValueError(
@@ -161,11 +169,23 @@ class GridWorldSimulation:
         self._width = base_world.width
         self._height = base_world.height
         self._obstacles = base_world.obstacles
-        starts = self._initial_positions(base_world.position, drone_count)
+        starts = self._initial_positions(
+            base_world.position,
+            drone_count,
+        )
+        mission_world = GridWorld(
+            width=self._width,
+            height=self._height,
+            seed=base_world.seed,
+            obstacles=self._obstacles,
+            start_position=base_world.position,
+            reserved_positions=starts,
+        )
+        self._objective_position = mission_world.debug_objective_position()
         self._drones: list[_Drone] = []
         for index, position in enumerate(starts):
             drone_world = (
-                base_world
+                mission_world
                 if index == 0
                 else GridWorld(
                     width=self._width,
@@ -173,6 +193,7 @@ class GridWorldSimulation:
                     seed=base_world.seed,
                     obstacles=self._obstacles,
                     start_position=position,
+                    include_hidden_objective=False,
                 )
             )
             identifier = f"{index + 1:02d}"
@@ -197,8 +218,25 @@ class GridWorldSimulation:
         self._seed = base_world.seed
         self._max_ticks = max_ticks
         self._status = MissionStatus.ACTIVE
+        self._belief_map = BeliefMap(
+            self._width,
+            self._height,
+            self._obstacles,
+            mission_world.objective_candidates,
+            self._mission_id,
+        )
+        if sensor_config is not None and not isinstance(sensor_config, SensorConfig):
+            raise ValueError("sensor_config must be a SensorConfig")
+        self._sensor_config = sensor_config if sensor_config is not None else SensorConfig()
+        self._sensor = ProximitySensor(self._sensor_config, base_world.seed)
+        self._observations: list[Observation] = []
+        self._observation_sequences = {drone.identifier: 0 for drone in self._drones}
 
-    def _initial_positions(self, first_position: Position, count: int) -> tuple[Position, ...]:
+    def _initial_positions(
+        self,
+        first_position: Position,
+        count: int,
+    ) -> tuple[Position, ...]:
         corners = (
             (0, 0),
             (self._width - 1, self._height - 1),
@@ -213,7 +251,10 @@ class GridWorldSimulation:
         )
         positions: list[Position] = []
         for point in candidates:
-            if point not in self._obstacles and point not in positions:
+            if (
+                point not in self._obstacles
+                and point not in positions
+            ):
                 positions.append(point)
                 if len(positions) == count:
                     return tuple(positions)
@@ -235,12 +276,69 @@ class GridWorldSimulation:
             status=self._status,
         )
 
+    @property
+    def sensor_config(self) -> SensorConfig:
+        return self._sensor_config
+
+    @property
+    def observations(self) -> tuple[Observation, ...]:
+        return tuple(self._observations)
+
+    @property
+    def belief_map(self) -> BeliefSnapshot:
+        return self._belief_map.snapshot()
+
+    @property
+    def belief_stats(self) -> BeliefStats:
+        return self._belief_map.stats
+
+    def debug_objective_position(self) -> Position:
+        """Return hidden ground truth for explicit tests and debugging only."""
+        return self._objective_position
+
     def set_mode(self, drone_id: str, mode: OperationalMode | str) -> None:
         drone = self._get_drone(drone_id)
         drone.mode = OperationalMode(mode)
         self._events.append(
             f"[{self._tick:04d}]  {drone.identifier} {drone.callsign} MODE {drone.mode.value}"
         )
+
+    def scan(self, drone_id: str) -> Observation:
+        """Collect one synthetic reading and consume one mission tick."""
+        if self._status is not MissionStatus.ACTIVE:
+            raise ValueError("cannot scan after the mission has ended")
+        drone = self._get_drone(drone_id)
+        positive = self._sensor.scan(drone.world.position, self._objective_position)
+        self._tick += 1
+        self._observation_sequences[drone.identifier] += 1
+        observation = Observation(
+            mission_id=self._mission_id,
+            observation_id=f"{self._mission_id}-OBS-{len(self._observations) + 1:06d}",
+            drone_id=drone.identifier,
+            tick=self._tick,
+            position=drone.world.position,
+            sensor_type=SensorType.PROXIMITY,
+            positive=positive,
+            sensor_config=self._sensor_config,
+            sequence_number=self._observation_sequences[drone.identifier],
+        )
+        previous_entropy = self._belief_map.stats.entropy_bits
+        belief_stats = self._belief_map.update(observation)
+        self._observations.append(observation)
+        reading = "POSITIVE" if positive else "NEGATIVE"
+        self._events.append(
+            f"[{self._tick:04d}]  {drone.callsign} SENSOR SCAN INITIATED"
+        )
+        self._events.append(
+            f"[{self._tick:04d}]  {drone.callsign} PROXIMITY: {reading} "
+            f"| ΔH {belief_stats.entropy_bits - previous_entropy:+.2f} bits"
+        )
+        if self._max_ticks is not None and self._tick >= self._max_ticks:
+            self._status = MissionStatus.BUDGET_EXHAUSTED
+            self._events.append(
+                f"[{self._tick:04d}]  MISSION COMPLETE / TICK BUDGET EXHAUSTED"
+            )
+        return observation
 
     def step(
         self,

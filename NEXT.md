@@ -1,11 +1,11 @@
 # The next single task
 
-Implement Milestone 4: Synthetic Sensor Simulation.
+Implement Milestone 6: Autonomous Search and Information-Gain Planning.
 
 Done when:
 
-- Add a small synthetic sensor model that produces deterministic readings for a fixed seed.
-- Represent sensor readings separately from hidden world state and expose only the observation to consumers.
-- Add unit tests for reading outcomes, determinism, and invalid configurations.
-- Keep the sensor and core simulation independent of Textual and Rich.
-- Do not add Bayesian inference, planning, persistence, networking, or new frameworks.
+- Add small deterministic exploration baselines and compare them with belief-driven information-gain planning.
+- Keep planner inputs limited to public world geometry, drone state, and belief state; never expose hidden objective ground truth.
+- Define reproducible evaluation metrics and tests for seeded scenarios.
+- Preserve manual movement and sensing controls.
+- Do not add networking, persistence, real drone control, or new frameworks.
