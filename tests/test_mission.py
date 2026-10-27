@@ -10,6 +10,7 @@ from nightjar.core.mission import (
 )
 from nightjar.core.provider import MissionStatus, OperationalMode
 from nightjar.core.provider import DRONE_CALLSIGNS
+from nightjar.core.sensor import SensorPreset
 from nightjar.core.world import Direction
 
 
@@ -20,6 +21,28 @@ def test_default_mission_configuration_is_valid():
     simulation = create_simulation(config)
     assert simulation.frame().tick == 0
     assert len(simulation.frame().drones) == config.drone_count
+
+
+@pytest.mark.parametrize(
+    ("preset", "sensitivity", "false_positive_probability"),
+    [
+        (SensorPreset.HIGH_RELIABILITY, 0.98, 0.02),
+        (SensorPreset.STANDARD, 0.90, 0.05),
+        (SensorPreset.DEGRADED, 0.75, 0.15),
+    ],
+)
+def test_sensor_presets_are_validated_and_applied(
+    preset, sensitivity, false_positive_probability
+):
+    simulation = create_simulation(MissionConfig(sensor_preset=preset))
+
+    config = MissionConfig(sensor_preset=preset)
+    assert all(check.passed for check in validate_mission_config(config))
+    assert simulation.sensor_config.sensitivity == sensitivity
+    assert (
+        simulation.sensor_config.false_positive_probability
+        == false_positive_probability
+    )
 
 
 @pytest.mark.parametrize(
@@ -72,10 +95,26 @@ def test_map_presets_create_requested_dimensions(preset, dimensions):
 
 def test_same_configuration_and_seed_produce_identical_worlds_and_spawns():
     config = MissionConfig(seed=82, map_preset=MapPreset.COMPACT)
-    first = create_simulation(config).frame()
-    second = create_simulation(config).frame()
+    first_simulation = create_simulation(config)
+    second_simulation = create_simulation(config)
+    first = first_simulation.frame()
+    second = second_simulation.frame()
 
     assert first.obstacles == second.obstacles
+    assert (
+        first_simulation.debug_objective_position()
+        == second_simulation.debug_objective_position()
+    )
+    assert first_simulation.debug_objective_position() not in {
+        drone.position for drone in first.drones
+    }
+    assert first_simulation.debug_objective_position() in set(
+        first_simulation.belief_map.candidate_positions
+    )
+    assert not (
+        {drone.position for drone in first.drones}
+        & set(first_simulation.belief_map.candidate_positions)
+    )
     assert [drone.position for drone in first.drones] == [
         drone.position for drone in second.drones
     ]
@@ -87,7 +126,8 @@ def test_same_configuration_and_seed_produce_identical_worlds_and_spawns():
 @pytest.mark.parametrize("drone_count", [1, 3, 10])
 def test_callsign_roster_is_stable_and_allocates_only_requested_drones(drone_count):
     config = MissionConfig(drone_count=drone_count, map_preset=MapPreset.COMPACT, seed=9)
-    frame = create_simulation(config).frame()
+    simulation = create_simulation(config)
+    frame = simulation.frame()
 
     assert len(frame.drones) == drone_count
     assert [drone.identifier for drone in frame.drones] == [
@@ -98,6 +138,9 @@ def test_callsign_roster_is_stable_and_allocates_only_requested_drones(drone_cou
     )
     assert len({drone.position for drone in frame.drones}) == drone_count
     assert all(drone.position not in frame.obstacles for drone in frame.drones)
+    candidates = set(simulation.belief_map.candidate_positions)
+    assert simulation.debug_objective_position() in candidates
+    assert candidates.isdisjoint(drone.position for drone in frame.drones)
 
 
 def test_callsign_roster_is_centralized_in_simulation_core():

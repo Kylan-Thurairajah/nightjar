@@ -87,6 +87,34 @@ def test_same_seed_reproduces_obstacles_and_movement():
     assert first.tick == second.tick == len(actions)
 
 
+def test_hidden_objective_is_valid_and_reproducible_without_public_exposure():
+    first = GridWorld(width=8, height=6, seed=42)
+    second = GridWorld(width=8, height=6, seed=42)
+
+    objective = first.debug_objective_position()
+    assert objective == second.debug_objective_position()
+    assert 0 <= objective[0] < first.width
+    assert 0 <= objective[1] < first.height
+    assert objective not in first.obstacles
+    assert objective != first.position
+    assert not hasattr(first, "objective_position")
+
+
+def test_hidden_objective_avoids_reserved_drone_spawns():
+    reserved = {(0, 0), (3, 0)}
+    world = GridWorld(
+        width=4,
+        height=3,
+        seed=17,
+        obstacles=(),
+        reserved_positions=reserved,
+    )
+
+    assert world.debug_objective_position() not in reserved
+    assert world.debug_objective_position() in world.objective_candidates
+    assert reserved.isdisjoint(world.objective_candidates)
+
+
 @pytest.mark.parametrize(
     "kwargs",
     [

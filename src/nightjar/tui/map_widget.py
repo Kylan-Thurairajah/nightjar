@@ -1,8 +1,11 @@
-"""Rich-colored grid widget. Swap the synthetic frame for real states later."""
+"""Rich-colored renderer for demo frames and GridWorld mission state."""
+
+import math
 
 from rich.text import Text
 from textual.widgets import Static
 
+from nightjar.core.belief import BeliefSnapshot
 from nightjar.core.demo import SimulationFrame
 from nightjar.core.provider import GridWorldFrame
 
@@ -51,11 +54,25 @@ class MapWidget(Static):
         frame: GridWorldFrame,
         layer: str = "terrain",
         selected_drone_id: str = "01",
+        belief_map: BeliefSnapshot | None = None,
     ) -> None:
         output = Text(no_wrap=True, overflow="crop")
         occupied = {drone.position: drone for drone in frame.drones}
         visited = set().union(*(drone.visited for drone in frame.drones))
         path = set().union(*(set(drone.path) for drone in frame.drones))
+        probabilities = belief_map.probabilities if belief_map is not None else None
+        prior_probability = (
+            belief_map.prior_cell_probability if belief_map is not None else 0.0
+        )
+        maximum_probability = (
+            float(probabilities.max()) if probabilities is not None else 0.0
+        )
+        has_evidence = maximum_probability > prior_probability * (1.0 + 1e-12)
+        map_position = (
+            belief_map.stats.map_position
+            if belief_map is not None and has_evidence
+            else None
+        )
 
         for y in range(frame.height):
             for x in range(frame.width):
@@ -74,6 +91,27 @@ class MapWidget(Static):
                     output.append("▒▒", style="#7bd49b")
                 elif layer == "paths" and point in path:
                     output.append("••", style="#a2d68f")
+                elif layer == "belief" and probabilities is not None:
+                    probability = float(probabilities[y, x])
+                    if probability <= 0:
+                        output.append("··", style="#182b20")
+                    elif has_evidence and point == map_position:
+                        output.append("██", style="bold #080f0c on #e0b45c")
+                    elif not has_evidence:
+                        output.append("░░", style="#31543c")
+                    else:
+                        ratio = max(probability / prior_probability, 1.0)
+                        peak_ratio = maximum_probability / prior_probability
+                        intensity = max(
+                            0.0,
+                            min(1.0, math.log(ratio) / math.log(peak_ratio)),
+                        )
+                        index = min(
+                            int(intensity * (len(HEAT_COLORS) - 1)),
+                            len(HEAT_COLORS) - 1,
+                        )
+                        glyph = ("░░", "▒▒", "▒▒", "▓▓", "▓▓", "██", "██", "██")[index]
+                        output.append(glyph, style=HEAT_COLORS[index])
                 else:
                     output.append("··", style="#31543c")
             if y < frame.height - 1:

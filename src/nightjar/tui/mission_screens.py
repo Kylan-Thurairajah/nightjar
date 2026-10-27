@@ -14,6 +14,7 @@ from nightjar.core.mission import (
     validate_mission_config,
 )
 from nightjar.core.provider import DRONE_CALLSIGNS, OperationalMode
+from nightjar.core.sensor import SensorPreset
 
 
 class DroneCountSlider(Static):
@@ -141,6 +142,23 @@ class MissionConfigScreen(Screen[MissionConfig | None]):
                             value=self.config.initial_control is OperationalMode.IDLE,
                             id="control-idle",
                         )
+                    yield Label("Synthetic sensor reliability preset")
+                    with RadioSet(id="sensor_preset", classes="option_set"):
+                        yield RadioButton(
+                            "HIGH RELIABILITY  98% / 2%",
+                            value=self.config.sensor_preset is SensorPreset.HIGH_RELIABILITY,
+                            id="sensor-high",
+                        )
+                        yield RadioButton(
+                            "STANDARD  90% / 5%",
+                            value=self.config.sensor_preset is SensorPreset.STANDARD,
+                            id="sensor-standard",
+                        )
+                        yield RadioButton(
+                            "DEGRADED  75% / 15%",
+                            value=self.config.sensor_preset is SensorPreset.DEGRADED,
+                            id="sensor-degraded",
+                        )
 
                     yield Static("SIMULATION PARAMETERS", classes="group_title")
                     with Horizontal(classes="field_row"):
@@ -192,7 +210,17 @@ class MissionConfigScreen(Screen[MissionConfig | None]):
             scenario_button = self.query_one("#scenario", RadioSet).pressed_button
             map_button = self.query_one("#map_preset", RadioSet).pressed_button
             control_button = self.query_one("#initial_control", RadioSet).pressed_button
-            if scenario_button is None or map_button is None or control_button is None:
+            sensor_button = self.query_one("#sensor_preset", RadioSet).pressed_button
+            if (
+                scenario_button is None
+                or map_button is None
+                or control_button is None
+                or sensor_button is None
+                or scenario_button.id is None
+                or map_button.id is None
+                or control_button.id is None
+                or sensor_button.id is None
+            ):
                 raise ValueError("choose a value for every option group")
             scenario = {
                 "scenario-open": ScenarioPreset.OPEN_FIELD,
@@ -207,6 +235,11 @@ class MissionConfigScreen(Screen[MissionConfig | None]):
                 "control-manual": OperationalMode.MANUAL,
                 "control-idle": OperationalMode.IDLE,
             }[control_button.id]
+            sensor_preset = {
+                "sensor-high": SensorPreset.HIGH_RELIABILITY,
+                "sensor-standard": SensorPreset.STANDARD,
+                "sensor-degraded": SensorPreset.DEGRADED,
+            }[sensor_button.id]
             return MissionConfig(
                 operation_name=self.query_one("#operation_name", Input).value.strip(),
                 scenario=scenario,
@@ -215,6 +248,7 @@ class MissionConfigScreen(Screen[MissionConfig | None]):
                 initial_control=initial_control,
                 max_ticks=int(self.query_one("#max_ticks", Input).value),
                 seed=int(self.query_one("#seed", Input).value),
+                sensor_preset=sensor_preset,
             )
         except (ValueError, TypeError, KeyError) as error:
             raise ValueError("counts, tick budget, and seed must be valid integers/options") from error
@@ -273,6 +307,10 @@ class PreflightReviewScreen(Screen[MissionConfig | None]):
             f" MAP           {self.config.width} × {self.config.height}\n"
             f" DRONES        {self.config.drone_count:02d}\n"
             f" CONTROL       {self.config.initial_control.value}\n"
+            f" SENSOR        {self.config.sensor_preset.value.replace('_', ' ').upper()}\n"
+            f" DETECTION     3 cells / Manhattan\n"
+            f" MODEL         {self.config.sensor_preset.probabilities[0]:.0%} sensitivity / "
+            f"{self.config.sensor_preset.probabilities[1]:.0%} false positive\n"
             f" TICK BUDGET   {self.config.max_ticks}\n"
             f" RANDOM SEED   {self.config.seed}"
         )

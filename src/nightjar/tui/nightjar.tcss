@@ -59,7 +59,7 @@ Screen {
 }
 
 #metrics {
-    height: 10;
+    height: 18;
     padding-top: 1;
     color: #b6d5b2;
 }

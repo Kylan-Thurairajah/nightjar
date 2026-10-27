@@ -32,7 +32,7 @@ class StepResult:
 
 
 class GridWorld:
-    """A rectangular grid with seeded obstacles and one agent at its start position."""
+    """A rectangular grid with seeded obstacles and a hidden synthetic objective."""
 
     _DELTAS = {
         Direction.NORTH: (0, -1),
@@ -40,6 +40,7 @@ class GridWorld:
         Direction.SOUTH: (0, 1),
         Direction.WEST: (-1, 0),
     }
+    _OBJECTIVE_SEED_SALT = 0x4E494748
 
     def __init__(
         self,
@@ -50,6 +51,8 @@ class GridWorld:
         obstacle_count: int | None = None,
         obstacles: Iterable[Position] | None = None,
         start_position: Position = (0, 0),
+        reserved_positions: Iterable[Position] = (),
+        include_hidden_objective: bool = True,
     ) -> None:
         if type(width) is not int or width < 1:
             raise ValueError("width must be a positive integer")
@@ -69,6 +72,8 @@ class GridWorld:
             type(obstacle_count) is not int or obstacle_count < 0
         ):
             raise ValueError("obstacle_count must be a non-negative integer")
+        if type(include_hidden_objective) is not bool:
+            raise ValueError("include_hidden_objective must be a boolean")
         if obstacles is not None and obstacle_count is not None:
             raise ValueError("provide either obstacles or obstacle_count, not both")
 
@@ -106,6 +111,47 @@ class GridWorld:
             selected = set(random.Random(seed).sample(available, obstacle_count))
 
         self._obstacles = frozenset(selected)
+        reserved = frozenset(reserved_positions)
+        for position in reserved:
+            if (
+                not isinstance(position, tuple)
+                or len(position) != 2
+                or any(type(coordinate) is not int for coordinate in position)
+            ):
+                raise ValueError("reserved_positions must contain integer (x, y) tuples")
+            x, y = position
+            if not (0 <= x < width and 0 <= y < height):
+                raise ValueError(f"reserved position {position!r} is outside the grid")
+            if position in self._obstacles:
+                raise ValueError("reserved positions cannot be obstacles")
+        objective_candidates = [
+            point
+            for point in available
+            if point not in self._obstacles
+            and point not in reserved
+            and point not in {
+                (0, 0),
+                (width - 1, 0),
+                (0, height - 1),
+                (width - 1, height - 1),
+            }
+        ]
+        if not objective_candidates:
+            objective_candidates = [
+                point
+                for point in available
+                if point not in self._obstacles and point not in reserved
+            ]
+        if include_hidden_objective and not objective_candidates:
+            raise ValueError("not enough free cells for a hidden objective")
+        self._objective_candidates = tuple(objective_candidates)
+        self._objective_position = (
+            random.Random(seed ^ self._OBJECTIVE_SEED_SALT).choice(
+                self._objective_candidates
+            )
+            if include_hidden_objective
+            else None
+        )
 
     @property
     def width(self) -> int:
@@ -130,6 +176,17 @@ class GridWorld:
     @property
     def tick(self) -> int:
         return self._tick
+
+    @property
+    def objective_candidates(self) -> tuple[Position, ...]:
+        """Return valid objective hypotheses without exposing sampled ground truth."""
+        return self._objective_candidates
+
+    def debug_objective_position(self) -> Position:
+        """Return hidden ground truth for explicit tests and debugging only."""
+        if self._objective_position is None:
+            raise RuntimeError("this GridWorld does not contain a hidden objective")
+        return self._objective_position
 
     def step(
         self,

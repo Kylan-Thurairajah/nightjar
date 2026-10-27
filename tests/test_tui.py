@@ -4,7 +4,8 @@ import pytest
 from textual.widgets import Input, RadioButton, RadioSet, Static
 
 from nightjar.core.mission import MapPreset, MissionConfig, ScenarioPreset
-from nightjar.core.provider import GridWorldSimulation, OperationalMode
+from nightjar.core.provider import GridWorldSimulation, MissionStatus, OperationalMode
+from nightjar.core.sensor import SensorPreset
 from nightjar.core.world import Direction, GridWorld
 from nightjar.tui.app import NightjarApp
 from nightjar.tui.map_widget import MapWidget
@@ -140,6 +141,9 @@ def test_wasd_moves_use_world_step_and_preserve_coverage_and_path_layers():
             assert "TRAVEL HISTORY" in app.query_one("#map_title", Static).render().plain
 
             await pilot.press("h")
+            assert app.layer == "belief"
+            assert "BELIEF HEATMAP" in app.query_one("#map_title", Static).render().plain
+            await pilot.press("h")
             assert app.layer == "terrain"
             assert "NEUTRAL TERRAIN" in app.query_one("#map_title", Static).render().plain
             assert "██" not in app.query_one("#map", MapWidget).render().plain
@@ -263,6 +267,7 @@ def test_preflight_settings_persist_when_returning_to_configuration_and_launch()
             config_screen.query_one("#scenario-open", RadioButton).value = True
             config_screen.query_one("#max_ticks", Input).value = "17"
             config_screen.query_one("#seed", Input).value = "29"
+            config_screen.query_one("#sensor-degraded", RadioButton).value = True
 
             await pilot.press("enter")
             assert isinstance(app.screen, PreflightReviewScreen)
@@ -273,6 +278,8 @@ def test_preflight_settings_persist_when_returning_to_configuration_and_launch()
             assert "5" in summary
             assert "17" in summary
             assert "29" in summary
+            assert "DEGRADED" in summary
+            assert "75% sensitivity / 15% false positive" in summary
             callsigns = app.screen.query_one("#callsigns", Static).render().plain
             assert "01  RAVEN" in callsigns
             assert "05  SPECTER" in callsigns
@@ -284,6 +291,7 @@ def test_preflight_settings_persist_when_returning_to_configuration_and_launch()
             assert app.screen.query_one("#drone_count", DroneCountSlider).value == 5
             assert app.screen.query_one("#map_preset", RadioSet).pressed_button.id == "map-compact"
             assert app.screen.query_one("#scenario", RadioSet).pressed_button.id == "scenario-open"
+            assert app.screen.query_one("#sensor_preset", RadioSet).pressed_button.id == "sensor-degraded"
 
             await pilot.press("enter")
             assert isinstance(app.screen, PreflightReviewScreen)
@@ -296,6 +304,8 @@ def test_preflight_settings_persist_when_returning_to_configuration_and_launch()
             assert frame.tick == 0
             assert frame.max_ticks == 17
             assert frame.seed == 29
+            assert app.mission_config.sensor_preset is SensorPreset.DEGRADED
+            assert app.gridworld_simulation.sensor_config.sensitivity == 0.75
 
     asyncio.run(configure_review_and_launch())
 
@@ -384,6 +394,116 @@ def test_mission_ui_enforces_tick_budget_and_allows_idle_to_manual_transition():
             assert "BUDGET EXHAUSTED" in app.query_one("#metrics", Static).render().plain
 
     asyncio.run(check_mission_controls())
+
+
+def test_e_scans_with_selected_drone_and_renders_the_observation():
+    config = MissionConfig(
+        scenario=ScenarioPreset.OPEN_FIELD,
+        drone_count=3,
+        map_preset=MapPreset.COMPACT,
+        max_ticks=5,
+    )
+    app = NightjarApp(mode="gridworld", mission_config=config)
+
+    async def check_sensor_scan():
+        async with app.run_test(size=(100, 40)) as pilot:
+            await pilot.press("2", "e")
+            observation = app.gridworld_simulation.observations[-1]
+            assert observation.drone_id == "02"
+            assert observation.position == app.gridworld_simulation.frame().drone("02").position
+            assert observation.tick == 1
+            metrics = app.query_one("#metrics", Static).render().plain
+            assert "SENSOR      LAST 001" in metrics
+            assert "PRESET      STANDARD" in metrics
+            assert "OBSERVATIONS" in metrics
+            assert "LAST READING" in metrics
+            events = app.query_one("#events", Static).render().plain
+            assert "GHOST SENSOR SCAN INITIATED" in events
+            assert "GHOST PROXIMITY:" in events
+            assert app.gridworld_simulation.debug_objective_position() not in {
+                drone.position for drone in app.gridworld_simulation.frame().drones
+            }
+
+    asyncio.run(check_sensor_scan())
+
+
+def test_e_after_tick_budget_exhaustion_is_rejected_and_logged():
+    config = MissionConfig(
+        scenario=ScenarioPreset.OPEN_FIELD,
+        drone_count=1,
+        map_preset=MapPreset.COMPACT,
+        max_ticks=1,
+    )
+    app = NightjarApp(mode="gridworld", mission_config=config)
+
+    async def check_rejected_scan():
+        async with app.run_test() as pilot:
+            await pilot.press("e")
+            assert app.gridworld_simulation.frame().status is MissionStatus.BUDGET_EXHAUSTED
+            assert len(app.gridworld_simulation.observations) == 1
+            await pilot.press("e")
+            assert len(app.gridworld_simulation.observations) == 1
+            assert app.gridworld_simulation.frame().tick == 1
+            assert "SCAN DENIED / MISSION INACTIVE" in app.query_one(
+                "#events", Static
+            ).render().plain
+
+    asyncio.run(check_rejected_scan())
+
+
+def test_h_displays_shared_belief_heatmap_and_scan_updates_map_and_statistics():
+    app = NightjarApp(
+        mode="gridworld",
+        mission_config=MissionConfig(
+            scenario=ScenarioPreset.OBSTACLE_FIELD,
+            drone_count=2,
+            map_preset=MapPreset.COMPACT,
+            seed=12,
+            max_ticks=20,
+        ),
+    )
+
+    async def check_belief_overlay():
+        async with app.run_test(size=(110, 42)) as pilot:
+            simulation = app.gridworld_simulation
+            initial_probabilities = simulation.belief_map.probabilities.copy()
+            initial_entropy = simulation.belief_stats.entropy_bits
+            await pilot.press("h")
+            assert app.layer == "belief"
+            assert "BELIEF HEATMAP" in app.query_one("#map_title", Static).render().plain
+            initial_map = app.query_one("#map", MapWidget).render().plain
+            assert "01" in initial_map and "▓▓" in initial_map
+            assert "░░" in initial_map
+
+            await pilot.press("e")
+            assert not (
+                simulation.belief_map.probabilities == initial_probabilities
+            ).all()
+            assert simulation.belief_stats.entropy_bits != initial_entropy
+            updated_map = app.query_one("#map", MapWidget).render().plain
+            assert updated_map != initial_map
+            assert "01" in updated_map and "▓▓" in updated_map
+            metrics = app.query_one("#metrics", Static).render().plain
+            assert "BELIEF H" in metrics
+            assert "ΔH / PRIOR" in metrics
+            assert "MAP CELL" in metrics
+            assert "MAP PROB" in metrics
+            assert "CANDIDATES" in metrics
+            assert "ΔH" in app.query_one("#events", Static).render().plain
+
+            after_scan = simulation.belief_map.probabilities.copy()
+            await pilot.press("d")
+            assert app.layer == "belief"
+            assert (simulation.belief_map.probabilities == after_scan).all()
+
+            await pilot.press("c", "p")
+            assert app.layer == "paths"
+            await pilot.press("h")
+            assert app.layer == "belief"
+            await pilot.press("h")
+            assert app.layer == "terrain"
+
+    asyncio.run(check_belief_overlay())
 
 
 def test_idle_mission_blocks_movement_until_manual_control_is_selected():
