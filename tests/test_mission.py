@@ -59,6 +59,7 @@ def test_sensor_presets_are_validated_and_applied(
         ({"seed": True}, "Random seed"),
         ({"scenario": "unknown"}, "Scenario"),
         ({"initial_control": OperationalMode.AUTO}, "Initial control"),
+        ({"search_strategy": "unknown"}, "Search planner"),
     ],
 )
 def test_invalid_mission_configuration_is_rejected(updates, failed_check):

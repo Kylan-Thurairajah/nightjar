@@ -5,6 +5,7 @@ from textual.widgets import Input, RadioButton, RadioSet, Static
 
 from nightjar.core.mission import MapPreset, MissionConfig, ScenarioPreset
 from nightjar.core.provider import GridWorldSimulation, MissionStatus, OperationalMode
+from nightjar.core.planning import SearchStrategy
 from nightjar.core.sensor import SensorPreset
 from nightjar.core.world import Direction, GridWorld
 from nightjar.tui.app import NightjarApp
@@ -268,6 +269,7 @@ def test_preflight_settings_persist_when_returning_to_configuration_and_launch()
             config_screen.query_one("#max_ticks", Input).value = "17"
             config_screen.query_one("#seed", Input).value = "29"
             config_screen.query_one("#sensor-degraded", RadioButton).value = True
+            config_screen.query_one("#planner-random", RadioButton).value = True
 
             await pilot.press("enter")
             assert isinstance(app.screen, PreflightReviewScreen)
@@ -279,6 +281,7 @@ def test_preflight_settings_persist_when_returning_to_configuration_and_launch()
             assert "17" in summary
             assert "29" in summary
             assert "DEGRADED" in summary
+            assert "RANDOM" in summary
             assert "75% sensitivity / 15% false positive" in summary
             callsigns = app.screen.query_one("#callsigns", Static).render().plain
             assert "01  RAVEN" in callsigns
@@ -306,6 +309,7 @@ def test_preflight_settings_persist_when_returning_to_configuration_and_launch()
             assert frame.seed == 29
             assert app.mission_config.sensor_preset is SensorPreset.DEGRADED
             assert app.gridworld_simulation.sensor_config.sensitivity == 0.75
+            assert app.gridworld_simulation.search_strategy is SearchStrategy.RANDOM
 
     asyncio.run(configure_review_and_launch())
 
@@ -471,6 +475,7 @@ def test_h_displays_shared_belief_heatmap_and_scan_updates_map_and_statistics():
             await pilot.press("h")
             assert app.layer == "belief"
             assert "BELIEF HEATMAP" in app.query_one("#map_title", Static).render().plain
+            assert "RELATIVE INTENSITY" in app.query_one("#legend", Static).render().plain
             initial_map = app.query_one("#map", MapWidget).render().plain
             assert "01" in initial_map and "▓▓" in initial_map
             assert "░░" in initial_map
@@ -526,6 +531,89 @@ def test_idle_mission_blocks_movement_until_manual_control_is_selected():
             assert frame.drones[0].mode.value == "MANUAL"
 
     asyncio.run(check_idle_transition())
+
+
+def test_autonomous_toggle_and_n_execute_one_planner_action_per_tick():
+    simulation = GridWorldSimulation(
+        GridWorld(width=8, height=6, obstacles=()),
+        drone_count=1,
+        max_ticks=10,
+        search_strategy=SearchStrategy.RANDOM,
+    )
+    app = NightjarApp(mode="gridworld", gridworld_simulation=simulation)
+
+    async def check_autonomous_controls():
+        async with app.run_test() as pilot:
+            await pilot.press("m")
+            assert simulation.frame().drone("01").mode is OperationalMode.AUTO
+            await pilot.press("e")
+            assert simulation.frame().tick == 0
+            assert "SCAN DENIED / SELECTED DRONE NOT MANUAL" in app.query_one(
+                "#events", Static
+            ).render().plain
+            await pilot.press("n")
+            assert simulation.frame().tick == 1
+            assert simulation.last_planner_decision is not None
+            assert simulation.last_planner_decision.strategy is SearchStrategy.RANDOM
+            metrics = app.query_one("#metrics", Static).render().plain
+            assert "PLANNER     RANDOM" in metrics
+            assert "PLAN:" in app.query_one("#timeline", Static).render().plain
+
+            await pilot.press("n")
+            assert simulation.frame().tick == 2
+            await pilot.press("m")
+            assert simulation.frame().drone("01").mode is OperationalMode.MANUAL
+            before_manual_move = simulation.frame().tick
+            await pilot.press("d")
+            assert simulation.frame().tick == before_manual_move + 1
+
+    asyncio.run(check_autonomous_controls())
+
+
+def test_space_runs_and_pauses_only_selected_auto_drone():
+    simulation = GridWorldSimulation(
+        GridWorld(width=8, height=6, obstacles=()),
+        drone_count=1,
+        max_ticks=10,
+        search_strategy=SearchStrategy.FRONTIER,
+    )
+    app = NightjarApp(mode="gridworld", gridworld_simulation=simulation)
+
+    async def check_auto_pause_resume():
+        async with app.run_test() as pilot:
+            await pilot.press("m")
+            await pilot.press("space")
+            assert app.playing
+            app._timer_tick()
+            assert simulation.frame().tick >= 1
+            await pilot.press("space")
+            assert not app.playing
+            paused_tick = simulation.frame().tick
+            app._timer_tick()
+            assert simulation.frame().tick == paused_tick
+
+    asyncio.run(check_auto_pause_resume())
+
+
+def test_information_gain_decision_is_summarized_in_existing_timeline():
+    simulation = GridWorldSimulation(
+        GridWorld(width=8, height=6, obstacles=()),
+        drone_count=1,
+        max_ticks=10,
+        search_strategy=SearchStrategy.INFORMATION_GAIN,
+    )
+    app = NightjarApp(mode="gridworld", gridworld_simulation=simulation)
+
+    async def check_summary():
+        async with app.run_test() as pilot:
+            await pilot.press("m", "n")
+            timeline = app.query_one("#timeline", Static).render().plain
+            assert "INFORMATION GAIN" in timeline
+            assert "PLAN:" in timeline
+            assert "IG" in timeline
+            assert "COST" in timeline
+
+    asyncio.run(check_summary())
 
 
 def test_inline_environment_and_map_selectors_support_keyboard_navigation():

@@ -14,6 +14,7 @@ from nightjar.core.mission import (
     validate_mission_config,
 )
 from nightjar.core.provider import DRONE_CALLSIGNS, OperationalMode
+from nightjar.core.planning import SearchStrategy
 from nightjar.core.sensor import SensorPreset
 
 
@@ -159,6 +160,23 @@ class MissionConfigScreen(Screen[MissionConfig | None]):
                             value=self.config.sensor_preset is SensorPreset.DEGRADED,
                             id="sensor-degraded",
                         )
+                    yield Label("Autonomous search planner")
+                    with RadioSet(id="search_strategy", classes="option_set"):
+                        yield RadioButton(
+                            "RANDOM",
+                            value=self.config.search_strategy is SearchStrategy.RANDOM,
+                            id="planner-random",
+                        )
+                        yield RadioButton(
+                            "FRONTIER",
+                            value=self.config.search_strategy is SearchStrategy.FRONTIER,
+                            id="planner-frontier",
+                        )
+                        yield RadioButton(
+                            "INFORMATION GAIN",
+                            value=self.config.search_strategy is SearchStrategy.INFORMATION_GAIN,
+                            id="planner-information-gain",
+                        )
 
                     yield Static("SIMULATION PARAMETERS", classes="group_title")
                     with Horizontal(classes="field_row"):
@@ -211,15 +229,18 @@ class MissionConfigScreen(Screen[MissionConfig | None]):
             map_button = self.query_one("#map_preset", RadioSet).pressed_button
             control_button = self.query_one("#initial_control", RadioSet).pressed_button
             sensor_button = self.query_one("#sensor_preset", RadioSet).pressed_button
+            planner_button = self.query_one("#search_strategy", RadioSet).pressed_button
             if (
                 scenario_button is None
                 or map_button is None
                 or control_button is None
                 or sensor_button is None
+                or planner_button is None
                 or scenario_button.id is None
                 or map_button.id is None
                 or control_button.id is None
                 or sensor_button.id is None
+                or planner_button.id is None
             ):
                 raise ValueError("choose a value for every option group")
             scenario = {
@@ -240,6 +261,11 @@ class MissionConfigScreen(Screen[MissionConfig | None]):
                 "sensor-standard": SensorPreset.STANDARD,
                 "sensor-degraded": SensorPreset.DEGRADED,
             }[sensor_button.id]
+            search_strategy = {
+                "planner-random": SearchStrategy.RANDOM,
+                "planner-frontier": SearchStrategy.FRONTIER,
+                "planner-information-gain": SearchStrategy.INFORMATION_GAIN,
+            }[planner_button.id]
             return MissionConfig(
                 operation_name=self.query_one("#operation_name", Input).value.strip(),
                 scenario=scenario,
@@ -249,6 +275,7 @@ class MissionConfigScreen(Screen[MissionConfig | None]):
                 max_ticks=int(self.query_one("#max_ticks", Input).value),
                 seed=int(self.query_one("#seed", Input).value),
                 sensor_preset=sensor_preset,
+                search_strategy=search_strategy,
             )
         except (ValueError, TypeError, KeyError) as error:
             raise ValueError("counts, tick budget, and seed must be valid integers/options") from error
@@ -308,6 +335,7 @@ class PreflightReviewScreen(Screen[MissionConfig | None]):
             f" DRONES        {self.config.drone_count:02d}\n"
             f" CONTROL       {self.config.initial_control.value}\n"
             f" SENSOR        {self.config.sensor_preset.value.replace('_', ' ').upper()}\n"
+            f" PLANNER       {self.config.search_strategy.label}\n"
             f" DETECTION     3 cells / Manhattan\n"
             f" MODEL         {self.config.sensor_preset.probabilities[0]:.0%} sensitivity / "
             f"{self.config.sensor_preset.probabilities[1]:.0%} false positive\n"
