@@ -8,9 +8,9 @@ The project is simulation-only: it does not control real drones or connect to ph
 
 The normal startup opens a mission configuration form followed by a separate preflight review. It validates an operation name, one of two environment presets, 1–10 drones, a supported map size, initial MANUAL or IDLE control, a positive tick budget, a nonnegative seed, and available spawn cells. Confirmed settings deterministically initialize the GridWorld and drone fleet.
 
-The running GridWorld TUI displays each drone's position and operational mode. Drones have independent movement histories and visited cells; movement and obstacle, boundary, and drone collision rules are handled by the core simulation. MANUAL control is available; IDLE drones can be switched to MANUAL with `M`. AUTO is represented for future work but autonomous behavior is not implemented. Each mission has one hidden, stationary synthetic point of interest, and `E` records a proximity scan from the selected drone. A shared Bayesian belief map updates from observations and is displayed with `H`; the target is not included in ordinary simulation frames, the belief model, or the map.
+The running GridWorld TUI displays each drone's position and operational mode. Drones have independent movement histories and visited cells; movement and obstacle, boundary, and drone collision rules are handled by the core simulation. `M` toggles the selected drone between MANUAL and AUTO; `I` sets it to IDLE. The configured planner policy is separate from this per-drone control mode. In this milestone only the selected AUTO drone executes; selecting another drone does not run it concurrently. Each mission has one hidden, stationary synthetic point of interest, and `E` records a manual proximity scan. A shared Bayesian belief map updates from observations and is displayed with `H`; planner inputs exclude the target's actual location.
 
-Environment presets are **Open field** and **Obstacle field**; map sizes are **Compact** (16×12), **Standard** (32×16), and **Extended** (40×20). Sensor configuration offers **High reliability**, **Standard**, and **Degraded** presets. Mission execution stops when its configured tick budget is exhausted.
+Environment presets are **Open field** and **Obstacle field**; map sizes are **Compact** (16×12), **Standard** (32×16), and **Extended** (40×20). Sensor configuration offers **High reliability**, **Standard**, and **Degraded** presets. Mission execution stops when its configured tick budget is exhausted or the active autonomous planner has no eligible action.
 
 ### Synthetic sensing and simulation ticks
 
@@ -18,7 +18,21 @@ The binary proximity sensor uses Manhattan distance with a fixed 3-cell detectio
 
 The sensor has a dedicated pseudorandom stream seeded from the mission seed, separate from obstacle generation. Repeating the same configuration and action sequence reproduces the same readings, observation IDs, and ordering. Every valid scan and every accepted movement attempt consumes one simulation tick, including a movement blocked by a wall, boundary, or drone; movement requests denied because a drone is IDLE do not. Scans are rejected once the mission tick budget is exhausted. Observation records contain the drone's scan position and sensor configuration, but not the hidden target location. No observations are persisted between runs.
 
-The belief starts uniformly over the world's valid objective cells and applies each scan once using that observation's recorded sensor settings. Readings are treated as conditionally independent given the objective location and their recorded sensor configurations. Entropy is shown in bits; the displayed entropy change is current entropy minus initial entropy (negative values indicate lower entropy, not guaranteed correctness), while each scan event reports the change since the preceding observation. The MAP coordinate marks the highest-probability cell, not a confirmed discovery. Belief updates use log probabilities to remain stable over long observation sequences. Exact-zero likelihoods stay impossible; evidence incompatible with all remaining hypotheses is rejected rather than resetting the distribution. No Bayesian computations use ground-truth coordinates.
+The belief starts uniformly over the world's valid objective cells and applies each scan once using that observation's recorded sensor settings. For each candidate, a positive reading has likelihood equal to sensitivity inside the sensor's Manhattan radius and false-positive probability outside it; a negative reading uses the corresponding complements. Bayes' rule multiplies those likelihoods by the prior/posterior and normalizes across candidates. Readings are treated as conditionally independent given the objective location and their recorded sensor configurations. Entropy is shown in bits; the displayed entropy change is current entropy minus initial entropy (negative values indicate lower entropy, not guaranteed correctness), while each scan event reports the change since the preceding observation. The MAP coordinate marks the highest-probability cell, not a confirmed discovery. Belief updates use log probabilities to remain stable over long observation sequences. Exact-zero likelihoods stay impossible; evidence incompatible with all remaining hypotheses is rejected rather than resetting the distribution. No Bayesian computations use ground-truth coordinates.
+
+The GridWorld heatmap labels its colors **relative intensity**: uniformly likely cells use a subdued green baseline, and cells above the uniform prior are shaded by their logarithmic probability gain relative to the prior, with the MAP cell highlighted in amber. Zero-probability cells remain distinct from low-probability cells, and the colors are not absolute probability bands. The `H` shortcut toggles this Bayesian heatmap against neutral terrain; coverage (`C`) and path (`P`) remain separate overlays.
+
+### Autonomous search policies
+
+Choose **RANDOM**, **FRONTIER**, or **INFORMATION GAIN** in mission configuration. The policy controls actual planner decisions; the initial control setting still independently determines whether drones start MANUAL or IDLE.
+
+- **RANDOM** uses a private pseudorandom stream seeded from the mission seed and chooses among legal cardinal moves and a scan at the current position if that position has not been scanned.
+- **FRONTIER** scans each position once, then follows a shortest-path BFS route to a reachable unvisited cell bordering visited territory. When no such frontier remains, it routes to the nearest other reachable unvisited cell, then stops when coverage is complete.
+- **INFORMATION GAIN** computes expected entropy reduction for the sensor's positive and negative outcomes at each reachable, unscanned sensing location. It chooses the best `expected information gain - 0.01 bits × (movement ticks + scan tick)` utility and moves toward it one cell per action. Ties are resolved by travel cost, then row and column. The fixed cost coefficient is a simple, interpretable tradeoff, not a measured performance optimum. A position is scanned at most once by this policy; after all positive-utility unscanned positions are exhausted, it stops.
+
+The information-gain expectation uses the same Manhattan-radius sensitivity/false-positive likelihoods and Bayesian posterior as mission scans. Hypothetical calculations do not mutate the mission belief. Movement and scans remain separate one-tick actions, routed through the existing world and observation pipeline. A noisy positive reading is not a confirmed discovery. Autonomous missions end on tick-budget exhaustion or when the chosen planner has no eligible action; no ground-truth search-success score is awarded. Random and frontier exploration are baselines, not claims of optimal search.
+
+In GridWorld mode, press `M` to toggle MANUAL/AUTO (an IDLE drone returns to MANUAL), `N` to execute one manual step or one AUTO planner action, and `Space` to play/pause automatic stepping for the selected AUTO drone. `W`/`A`/`S`/`D` and `E` remain manual controls and are denied for AUTO/IDLE drones. Planner policy and current mode appear in telemetry; the existing timeline panel shows the latest decision, estimated information gain, and travel cost when applicable.
 
 The original scripted three-agent demonstration remains available with `--mode demo`. Its synthetic heatmap is illustrative, not Bayesian inference; agent routes and statuses are scripted.
 
@@ -64,13 +78,14 @@ Use `Tab` to move between fields. Adjust the 1–10 drone-count slider with `←
 
 | Key | Action |
 | --- | --- |
-| `Space` | Play or pause the scripted demo |
-| `N` | Advance one demo tick, or a predefined move for the selected drone |
+| `Space` | Play/pause demo; in GridWorld, run/pause the selected AUTO drone |
+| `N` | Advance one demo tick; one manual move; or one AUTO planner action |
 | `W` / `A` / `S` / `D` | Move the selected MANUAL drone one cell |
-| `E` | Scan for the hidden objective with the selected drone |
+| `E` | Manually scan with the selected MANUAL drone |
 | `Tab` | Cycle to the next drone |
 | `1` / `2` / `3` | Select RAVEN / GHOST / VIPER |
-| `M` / `I` | Set selected drone to MANUAL / IDLE |
+| `M` | Toggle selected GridWorld drone between MANUAL and AUTO |
+| `I` | Set selected GridWorld drone to IDLE |
 | `H` | Toggle the mission belief heatmap / terrain, or show the demo heatmap |
 | `C` | Show visited-cell coverage |
 | `P` | Show movement paths |
@@ -90,7 +105,7 @@ If the project is not installed in the active Python environment, install it wit
 
 ## Roadmap
 
-1. **Milestone 6: Autonomous Search and Information-Gain Planning** — compare random/frontier exploration policies with belief-driven information-gain planning using deterministic simulations and reproducible metrics; keep planners independent of hidden ground truth.
+1. **Milestone 7: Hybrid Multi-Agent Autonomous Operations** — coordinate multiple AUTO drones safely through serial actions and the shared belief map while preserving manual/idle controls.
 2. Add deterministic event records and snapshot-based replay.
 3. Consider persistence only if a concrete requirement justifies it.
 

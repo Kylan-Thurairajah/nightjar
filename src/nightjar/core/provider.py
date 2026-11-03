@@ -7,6 +7,13 @@ from enum import Enum
 from typing import Iterable
 
 from nightjar.core.belief import BeliefMap, BeliefSnapshot, BeliefStats
+from nightjar.core.planning import (
+    PlannerActionType,
+    PlannerDecision,
+    PlannerState,
+    SearchStrategy,
+    create_planner,
+)
 from nightjar.core.sensor import (
     Observation,
     ProximitySensor,
@@ -39,6 +46,7 @@ class OperationalMode(str, Enum):
 class MissionStatus(str, Enum):
     ACTIVE = "ACTIVE"
     BUDGET_EXHAUSTED = "BUDGET EXHAUSTED"
+    PLANNER_EXHAUSTED = "PLANNER EXHAUSTED"
 
 
 @dataclass(frozen=True)
@@ -149,6 +157,7 @@ class GridWorldSimulation:
         operation_name: str = "GRIDWORLD",
         scenario: str = "obstacle_field",
         sensor_config: SensorConfig | None = None,
+        search_strategy: SearchStrategy = SearchStrategy.INFORMATION_GAIN,
     ) -> None:
         if type(drone_count) is not int or not 1 <= drone_count <= len(DRONE_CALLSIGNS):
             raise ValueError(
@@ -161,6 +170,8 @@ class GridWorldSimulation:
             raise ValueError("initial_mode supports MANUAL or IDLE, not AUTO")
         if not operation_name.strip():
             raise ValueError("operation_name must not be empty")
+        if not isinstance(search_strategy, SearchStrategy):
+            raise ValueError("search_strategy must be a supported SearchStrategy")
         self._directions = tuple(Direction(direction) for direction in directions)
         if not self._directions:
             raise ValueError("directions must contain at least one movement")
@@ -218,6 +229,9 @@ class GridWorldSimulation:
         self._seed = base_world.seed
         self._max_ticks = max_ticks
         self._status = MissionStatus.ACTIVE
+        self._search_strategy = search_strategy
+        self._planner = create_planner(search_strategy, base_world.seed ^ 0x504C414E)
+        self._last_planner_decision: PlannerDecision | None = None
         self._belief_map = BeliefMap(
             self._width,
             self._height,
@@ -281,6 +295,14 @@ class GridWorldSimulation:
         return self._sensor_config
 
     @property
+    def search_strategy(self) -> SearchStrategy:
+        return self._search_strategy
+
+    @property
+    def last_planner_decision(self) -> PlannerDecision | None:
+        return self._last_planner_decision
+
+    @property
     def observations(self) -> tuple[Observation, ...]:
         return tuple(self._observations)
 
@@ -326,8 +348,9 @@ class GridWorldSimulation:
         belief_stats = self._belief_map.update(observation)
         self._observations.append(observation)
         reading = "POSITIVE" if positive else "NEGATIVE"
+        auto_label = " AUTO" if drone.mode is OperationalMode.AUTO else ""
         self._events.append(
-            f"[{self._tick:04d}]  {drone.callsign} SENSOR SCAN INITIATED"
+            f"[{self._tick:04d}]  {drone.callsign}{auto_label} SENSOR SCAN INITIATED"
         )
         self._events.append(
             f"[{self._tick:04d}]  {drone.callsign} PROXIMITY: {reading} "
@@ -346,7 +369,7 @@ class GridWorldSimulation:
         *,
         drone_id: str | None = None,
     ) -> GridWorldFrame:
-        if self._status is MissionStatus.BUDGET_EXHAUSTED:
+        if self._status is not MissionStatus.ACTIVE:
             return self.frame()
         identifier = self._drones[0].identifier if drone_id is None else drone_id
         drone = self._get_drone(identifier)
@@ -357,6 +380,95 @@ class GridWorldSimulation:
         else:
             direction = Direction(direction)
 
+        self._move_drone(drone, direction, autonomous=False)
+        return self.frame()
+
+    def autonomous_step(self, drone_id: str) -> GridWorldFrame:
+        """Execute at most one planner-selected movement or scan action."""
+        if self._status is not MissionStatus.ACTIVE:
+            return self.frame()
+        drone = self._get_drone(drone_id)
+        if drone.mode is not OperationalMode.AUTO:
+            raise ValueError(f"drone {drone.identifier} is not in AUTO mode")
+
+        occupied = frozenset(
+            other.world.position for other in self._drones if other is not drone
+        )
+        permitted_moves: list[Direction] = []
+        x, y = drone.world.position
+        deltas = {
+            Direction.NORTH: (0, -1),
+            Direction.EAST: (1, 0),
+            Direction.SOUTH: (0, 1),
+            Direction.WEST: (-1, 0),
+        }
+        for direction in deltas:
+            dx, dy = deltas[direction]
+            destination = (x + dx, y + dy)
+            if (
+                0 <= destination[0] < self._width
+                and 0 <= destination[1] < self._height
+                and destination not in self._obstacles
+                and destination not in occupied
+            ):
+                permitted_moves.append(direction)
+
+        scanned_positions = frozenset(
+            observation.position for observation in self._observations
+        )
+        state = PlannerState(
+            width=self._width,
+            height=self._height,
+            obstacles=self._obstacles,
+            position=drone.world.position,
+            traversable=frozenset(
+                (cell_x, cell_y)
+                for cell_y in range(self._height)
+                for cell_x in range(self._width)
+                if (cell_x, cell_y) not in self._obstacles
+            ),
+            visited=frozenset(drone.visited),
+            movement_history=tuple(drone.path),
+            scanned_positions=scanned_positions,
+            occupied_positions=occupied,
+            permitted_moves=tuple(permitted_moves),
+            scan_permitted=drone.world.position not in scanned_positions,
+            belief=self._belief_map.snapshot(),
+            sensor_config=self._sensor_config,
+            remaining_budget=(
+                None if self._max_ticks is None else self._max_ticks - self._tick
+            ),
+        )
+        decision = self._planner.decide(state)
+        self._last_planner_decision = decision
+        action = decision.action
+        if action.type is PlannerActionType.STOP:
+            self._status = MissionStatus.PLANNER_EXHAUSTED
+            self._events.append(
+                f"[{self._tick:04d}]  {self._search_strategy.label} PLANNER EXHAUSTED"
+            )
+        elif action.type is PlannerActionType.SCAN:
+            if not state.scan_permitted:
+                raise RuntimeError("planner returned a scan at an already scanned position")
+            self.scan(drone.identifier)
+        elif action.type is PlannerActionType.MOVE:
+            if (
+                action.direction is None
+                or action.direction not in state.permitted_moves
+            ):
+                raise RuntimeError("planner returned a movement that is not permitted")
+            self._move_drone(drone, action.direction, autonomous=True)
+        else:
+            raise RuntimeError(f"planner returned unsupported action: {action.type!r}")
+        return self.frame()
+
+    def _move_drone(
+        self,
+        drone: _Drone,
+        direction: Direction,
+        *,
+        autonomous: bool,
+    ) -> None:
         occupied = {
             other.world.position
             for other in self._drones
@@ -387,13 +499,18 @@ class GridWorldSimulation:
             )
         self._tick += 1
         self._steps += 1
+        if autonomous:
+            description = (
+                f"{drone.callsign} AUTO MOVE {direction.value.upper()}"
+                if result.moved
+                else f"{drone.callsign} AUTO BLOCKED {direction.value.upper()}"
+            )
         self._events.append(f"[{self._tick:04d}]  {description}")
         if self._max_ticks is not None and self._tick >= self._max_ticks:
             self._status = MissionStatus.BUDGET_EXHAUSTED
             self._events.append(
                 f"[{self._tick:04d}]  MISSION COMPLETE / TICK BUDGET EXHAUSTED"
             )
-        return self.frame()
 
     def _get_drone(self, drone_id: str) -> _Drone:
         for drone in self._drones:

@@ -35,7 +35,7 @@ class NightjarApp(App[None]):
         Binding("1", "select_drone('01')", "RAVEN"),
         Binding("2", "select_drone('02')", "GHOST"),
         Binding("3", "select_drone('03')", "VIPER"),
-        Binding("m", "set_control('MANUAL')", "Manual control"),
+        Binding("m", "toggle_control", "Toggle manual / auto"),
         Binding("i", "set_control('IDLE')", "Idle control"),
         Binding("r", "toggle_replay", "Replay"),
         Binding("left", "seek(-1)", "Back", show=False),
@@ -92,7 +92,8 @@ class NightjarApp(App[None]):
                 )
                 yield MapWidget(id="map")
                 legend = (
-                    " ▓▓ WALL  01-10 DRONES  WASD MOVE  [E] SCAN  [H] BELIEF  [C] COVER  [P] PATH"
+                    " ▓▓ WALL  01-10 DRONES  WASD MOVE  [E] SCAN  "
+                    "[H] BELIEF / RELATIVE INTENSITY  [C] COVER  [P] PATH"
                     if self.mode == "gridworld"
                     else " LOW  ░░  ▒▒  ██   ▓▓ WALL     01 DRONE     [H] HEAT  [C] COVER  [P] PATH"
                 )
@@ -111,7 +112,8 @@ class NightjarApp(App[None]):
                 yield Static("┌ MISSION REPLAY", classes="section_title")
                 yield Static(id="timeline")
         mode_note = (
-            " GRIDWORLD  •  WASD move  E scan  H belief heatmap  Tab/1-3 select"
+            " GRIDWORLD  •  WASD/E manual  M manual/auto  N step  Space run  "
+            "H belief  Tab/1-3 select"
             if self.mode == "gridworld"
             else " TERMINAL-FIRST PROTOTYPE  •  Synthetic belief field, scripted agent routes  •  No external sensors"
         )
@@ -143,6 +145,19 @@ class NightjarApp(App[None]):
         self._refresh_screen()
 
     def _timer_tick(self) -> None:
+        if self.mode == "gridworld":
+            if not self.playing:
+                return
+            selected = self.gridworld_simulation.frame().drone(self.selected_drone_id)
+            if selected.mode.value != "AUTO":
+                self.playing = False
+                self._refresh_screen()
+                return
+            self.gridworld_simulation.autonomous_step(self.selected_drone_id)
+            if self.gridworld_simulation.frame().status is not MissionStatus.ACTIVE:
+                self.playing = False
+            self._refresh_screen()
+            return
         if self.playing:
             self.tick = min(MAX_TICK, self.tick + 1)
             if self.tick == MAX_TICK:
@@ -152,7 +167,23 @@ class NightjarApp(App[None]):
     def action_set_control(self, mode: str) -> None:
         if self.mode != "gridworld":
             return
+        if mode != "AUTO":
+            self.playing = False
         self.gridworld_simulation.set_mode(self.selected_drone_id, mode)
+        self._refresh_screen()
+
+    def action_toggle_control(self) -> None:
+        if self.mode != "gridworld":
+            return
+        selected = self.gridworld_simulation.frame().drone(self.selected_drone_id)
+        next_mode = (
+            "AUTO"
+            if selected.mode.value == "MANUAL"
+            else "MANUAL"
+        )
+        if next_mode == "MANUAL":
+            self.playing = False
+        self.gridworld_simulation.set_mode(self.selected_drone_id, next_mode)
         self._refresh_screen()
 
     def _refresh_screen(self) -> None:
@@ -275,11 +306,11 @@ class NightjarApp(App[None]):
         )
         belief = self.gridworld_simulation.belief_stats
         map_x, map_y = belief.map_position
-        self.query_one("#metrics", Static).update(
-            f" GRID        {frame.width:3d} × {frame.height:<3d}\n"
+        metrics = (
             f" SELECTED    {selected.identifier} {selected.callsign}\n"
             f" POSITION    ({selected.position[0]:02d},{selected.position[1]:02d})\n"
             f" STATUS      {selected.mode.value}\n"
+            f" PLANNER     {self.gridworld_simulation.search_strategy.label}\n"
             f" SENSOR      {sensor_status}\n"
             f" PRESET      {sensor_preset}\n"
             f" OBSERVATIONS {len(observations):4d}\n"
@@ -295,6 +326,8 @@ class NightjarApp(App[None]):
             f" MISSION     {frame.status.value}\n"
             f" RESULT      {movement}"
         )
+        decision = self.gridworld_simulation.last_planner_decision
+        self.query_one("#metrics", Static).update(metrics)
         for event in frame.events:
             if event not in self._seen_provider_events:
                 self._ui_events.append(event)
@@ -306,15 +339,45 @@ class NightjarApp(App[None]):
             else f"{last_observation.sensor_type.value} "
             f"{'POSITIVE' if last_observation.positive else 'NEGATIVE'}"
         )
+        if decision is None:
+            planner_summary = " PLAN: READY"
+        else:
+            action_label = decision.action.type.value.upper()
+            if decision.action.direction is not None:
+                action_label += f" {decision.action.direction.value.upper()}"
+            if decision.target is not None:
+                action_label += f" → ({decision.target[0]:02d},{decision.target[1]:02d})"
+            planner_summary = f" PLAN: {action_label}"
+            if decision.expected_information_gain_bits is not None:
+                planner_summary += (
+                    f"\n IG {decision.expected_information_gain_bits:.4f} bits"
+                )
+            if decision.travel_cost is not None:
+                planner_summary += f" / COST {decision.travel_cost} ticks"
         self.query_one("#timeline", Static).update(
-            f" GRIDWORLD  /  TICK {frame.tick:04d}\n\n"
-            f" LAST SENSOR: {last_sensor}\n\n"
+            f" GRIDWORLD  /  TICK {frame.tick:04d}\n"
+            f" LAST SENSOR: {last_sensor}\n"
+            f" {self.gridworld_simulation.search_strategy.label}\n"
+            f"{planner_summary}\n"
             f" STATUS: {frame.status.value}\n"
-            " [dim]Tab / 1-3 select  WASD move  E scan  M manual  I idle[/dim]"
+            " [dim]M manual/auto  N step  Space run/pause  WASD/E manual[/dim]"
         )
 
     def action_toggle_play(self) -> None:
         if self.mode == "gridworld":
+            selected = self.gridworld_simulation.frame().drone(self.selected_drone_id)
+            if selected.mode.value != "AUTO":
+                self._ui_events.append(
+                    f"[{self.tick:04d}] AUTO RUN DENIED / SELECTED DRONE NOT AUTO"
+                )
+                self.playing = False
+                self._refresh_screen()
+                return
+            if self.gridworld_simulation.frame().status is not MissionStatus.ACTIVE:
+                self.playing = False
+                return
+            self.playing = not self.playing
+            self._refresh_screen()
             return
         self.replay_mode = False
         if self.tick >= MAX_TICK:
@@ -326,6 +389,10 @@ class NightjarApp(App[None]):
         if self.mode == "gridworld":
             self.playing = False
             selected = self.gridworld_simulation.frame().drone(self.selected_drone_id)
+            if selected.mode.value == "AUTO":
+                self.gridworld_simulation.autonomous_step(self.selected_drone_id)
+                self._refresh_screen()
+                return
             if selected.mode.value != "MANUAL":
                 self._ui_events.append(
                     f"[{self.tick:04d}]  {selected.identifier} {selected.callsign} "
@@ -360,6 +427,13 @@ class NightjarApp(App[None]):
         if self.mode != "gridworld":
             return
         frame = self.gridworld_simulation.frame()
+        selected = frame.drone(self.selected_drone_id)
+        if selected.mode.value != "MANUAL":
+            self._ui_events.append(
+                f"[{frame.tick:04d}] SCAN DENIED / SELECTED DRONE NOT MANUAL"
+            )
+            self._refresh_screen()
+            return
         if frame.status is not MissionStatus.ACTIVE:
             self._ui_events.append(
                 f"[{frame.tick:04d}] SCAN DENIED / MISSION INACTIVE"

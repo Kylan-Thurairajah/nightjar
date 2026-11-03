@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass
 from enum import Enum
 
+from nightjar.core.planning import SearchStrategy
 from nightjar.core.provider import GridWorldSimulation, OperationalMode
 from nightjar.core.sensor import SensorConfig, SensorPreset
 from nightjar.core.world import GridWorld
@@ -40,6 +41,7 @@ class MissionConfig:
     max_ticks: int = 500
     seed: int = 0
     sensor_preset: SensorPreset = SensorPreset.STANDARD
+    search_strategy: SearchStrategy = SearchStrategy.INFORMATION_GAIN
 
     @property
     def mission_id(self) -> str:
@@ -161,6 +163,15 @@ def validate_mission_config(config: MissionConfig) -> tuple[ValidationCheck, ...
             else "Select a supported sensor reliability preset.",
         )
     )
+    checks.append(
+        ValidationCheck(
+            "Search planner",
+            isinstance(config.search_strategy, SearchStrategy),
+            "Supported autonomous search strategy."
+            if isinstance(config.search_strategy, SearchStrategy)
+            else "Select a supported search planner.",
+        )
+    )
 
     foundational_checks_pass = all(check.passed for check in checks)
     if not foundational_checks_pass:
@@ -183,6 +194,7 @@ def validate_mission_config(config: MissionConfig) -> tuple[ValidationCheck, ...
             operation_name=config.operation_name,
             scenario=config.scenario.value,
             sensor_config=SensorConfig.from_preset(config.sensor_preset),
+            search_strategy=config.search_strategy,
         )
     except ValueError as error:
         checks.append(ValidationCheck("Spawn capacity", False, str(error)))
@@ -211,4 +223,5 @@ def create_simulation(config: MissionConfig) -> GridWorldSimulation:
         operation_name=config.operation_name,
         scenario=config.scenario.value,
         sensor_config=SensorConfig.from_preset(config.sensor_preset),
+        search_strategy=config.search_strategy,
     )
