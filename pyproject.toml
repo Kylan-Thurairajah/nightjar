@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "ruff==0.17.3", "mypy==2.4.1"]
 
 [project.scripts]
 nightjar = "nightjar.__main__:main"
@@ -27,3 +27,20 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+extend-exclude = ["nightjar-tui-starter"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+# Audited legacy unused imports; avoid rewriting production files for bootstrap.
+[tool.ruff.lint.per-file-ignores]
+"src/nightjar/core/demo.py" = ["F401"]
+"tests/test_tui.py" = ["F401"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src/nightjar/core", "src/nightjar/benchmark.py"]
+follow_imports = "silent"

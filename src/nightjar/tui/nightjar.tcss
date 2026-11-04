@@ -97,3 +97,20 @@ Footer {
     background: #122719;
     color: #b6e7bd;
 }
+
+/* Keep replay controls on screen in compact terminals; desktop sizing is unchanged. */
+Screen.compact #masthead {
+    height: 2;
+}
+
+Screen.compact #workspace {
+    min-height: 7;
+}
+
+Screen.compact #map_panel {
+    min-width: 0;
+}
+
+Screen.compact #telemetry_panel {
+    overflow-y: auto;
+}
