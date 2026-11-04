@@ -124,6 +124,23 @@ def test_non_manual_operational_modes_do_not_accept_manual_movement():
     assert simulation.frame().drone("02").position == (3, 2)
 
 
+def test_manual_queue_and_fleet_round_execute_serially_without_duplicate_actions():
+    simulation = GridWorldSimulation(
+        GridWorld(width=6, height=4, obstacles=()),
+        drone_count=2,
+    )
+    simulation.set_mode("01", OperationalMode.MANUAL)
+    simulation.set_mode("02", OperationalMode.AUTO)
+    simulation.queue_manual_action("01", Direction.EAST)
+
+    frame = simulation.fleet_round()
+
+    assert frame.drone("01").position != (0, 0)
+    assert frame.drone("02").mode is OperationalMode.AUTO
+    assert frame.drone("01").position != frame.drone("02").position
+    assert "QUEUED MOVE EAST" in "\n".join(frame.events)
+
+
 def test_core_provider_imports_without_textual_or_rich():
     script = """
 import importlib.abc

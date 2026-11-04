@@ -1,12 +1,11 @@
 # The next single task
 
-Implement Milestone 7: Hybrid Multi-Agent Autonomous Operations.
+Implement Milestone 8: Deterministic Replay and Mission Timeline.
 
 Done when:
 
-- Add safe, deterministic coordination for multiple AUTO drones using the existing planner interface and shared belief.
-- Prevent collisions and duplicate simultaneous mission actions while preserving serial tick semantics.
-- Define how manual control, AUTO, and IDLE interact when multiple drones are active.
-- Add seeded tests for coordination, action ordering, and shared-observation updates.
-- Preserve the current compact Textual interface and manual movement/sensing controls.
-- Do not add networking, persistence, real drone control, or new frameworks.
+- Capture a reproducible serialized mission snapshot for each committed fleet round, including drone positions, modes, observations, and belief state.
+- Rebuild a replay timeline from those snapshots without introducing networked services or external persistence.
+- Expose replay controls for stepping backward/forward across deterministic mission history while preserving the current compact Textual layout.
+- Add seed-based tests covering snapshot determinism and replay ordering across multiple drones.
+- Keep core simulation logic independent from Textual, and leave the demo path unchanged unless it is needed for the replay workflow.

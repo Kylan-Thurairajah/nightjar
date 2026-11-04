@@ -245,6 +245,8 @@ class GridWorldSimulation:
         self._sensor = ProximitySensor(self._sensor_config, base_world.seed)
         self._observations: list[Observation] = []
         self._observation_sequences = {drone.identifier: 0 for drone in self._drones}
+        self._manual_requests: dict[str, Direction] = {}
+        self._reservations: dict[str, Position] = {}
 
     def _initial_positions(
         self,
@@ -318,12 +320,60 @@ class GridWorldSimulation:
         """Return hidden ground truth for explicit tests and debugging only."""
         return self._objective_position
 
+    @property
+    def reservations(self) -> frozenset[Position]:
+        return frozenset(self._reservations.values())
+
+    def queue_manual_action(self, drone_id: str, direction: Direction | str) -> Direction:
+        """Queue one explicit movement for the next serial fleet round."""
+        drone = self._get_drone(drone_id)
+        if drone.mode is not OperationalMode.MANUAL:
+            raise ValueError(f"drone {drone.identifier} is not in MANUAL mode")
+        requested = Direction(direction)
+        self._manual_requests[drone.identifier] = requested
+        self._events.append(
+            f"[{self._tick:04d}]  {drone.identifier} {drone.callsign} QUEUED MOVE {requested.value.upper()}"
+        )
+        return requested
+
+    def clear_manual_action(self, drone_id: str) -> None:
+        self._manual_requests.pop(drone_id, None)
+
     def set_mode(self, drone_id: str, mode: OperationalMode | str) -> None:
         drone = self._get_drone(drone_id)
         drone.mode = OperationalMode(mode)
+        self._reservations.pop(drone.identifier, None)
+        self._manual_requests.pop(drone.identifier, None)
         self._events.append(
             f"[{self._tick:04d}]  {drone.identifier} {drone.callsign} MODE {drone.mode.value}"
         )
+
+    def fleet_round(self) -> GridWorldFrame:
+        """Process queued manual actions first, then each AUTO drone in stable order."""
+        if self._status is not MissionStatus.ACTIVE:
+            return self.frame()
+
+        ordered_ids = [drone.identifier for drone in self._drones]
+        for drone_id in ordered_ids:
+            drone = self._get_drone(drone_id)
+            queued = self._manual_requests.pop(drone_id, None)
+            if queued is not None:
+                if drone.mode is not OperationalMode.MANUAL:
+                    continue
+                self._move_drone(drone, queued, autonomous=False)
+                continue
+            if drone.mode is OperationalMode.AUTO:
+                self._resolve_autonomous_action(drone)
+        return self.frame()
+
+    def step_fleet(self) -> GridWorldFrame:
+        return self.fleet_round()
+
+    def run_fleet_round(self) -> GridWorldFrame:
+        return self.fleet_round()
+
+    def advance_fleet(self) -> GridWorldFrame:
+        return self.fleet_round()
 
     def scan(self, drone_id: str) -> Observation:
         """Collect one synthetic reading and consume one mission tick."""
@@ -383,17 +433,16 @@ class GridWorldSimulation:
         self._move_drone(drone, direction, autonomous=False)
         return self.frame()
 
-    def autonomous_step(self, drone_id: str) -> GridWorldFrame:
-        """Execute at most one planner-selected movement or scan action."""
+    def _resolve_autonomous_action(self, drone: _Drone) -> GridWorldFrame:
+        """Execute the planner-selected action for a single AUTO drone."""
         if self._status is not MissionStatus.ACTIVE:
             return self.frame()
-        drone = self._get_drone(drone_id)
         if drone.mode is not OperationalMode.AUTO:
             raise ValueError(f"drone {drone.identifier} is not in AUTO mode")
 
         occupied = frozenset(
             other.world.position for other in self._drones if other is not drone
-        )
+        ) | frozenset(self._reservations.values())
         permitted_moves: list[Direction] = []
         x, y = drone.world.position
         deltas = {
@@ -462,6 +511,13 @@ class GridWorldSimulation:
             raise RuntimeError(f"planner returned unsupported action: {action.type!r}")
         return self.frame()
 
+    def autonomous_step(self, drone_id: str) -> GridWorldFrame:
+        """Execute at most one planner-selected movement or scan action."""
+        if self._status is not MissionStatus.ACTIVE:
+            return self.frame()
+        drone = self._get_drone(drone_id)
+        return self._resolve_autonomous_action(drone)
+
     def _move_drone(
         self,
         drone: _Drone,
@@ -474,17 +530,25 @@ class GridWorldSimulation:
             for other in self._drones
             if other is not drone
         }
+        reserved = self._reservations.copy()
+        for drone_id, destination in reserved.items():
+            if drone_id != drone.identifier:
+                occupied.add(destination)
+        if drone.identifier in self._reservations:
+            self._reservations[drone.identifier] = (drone.world.position[0], drone.world.position[1])
         result = drone.world.step(direction, occupied_positions=occupied)
         drone.last_direction = direction
         drone.last_result = result
         drone.visited.add(result.position)
         if result.moved:
             drone.path.append(result.position)
+            self._reservations[drone.identifier] = result.position
             description = (
                 f"{drone.identifier} {drone.callsign} MOVED {direction.value.upper()} TO "
                 f"({result.position[0]:02d},{result.position[1]:02d})"
             )
         else:
+            self._reservations.pop(drone.identifier, None)
             reason = result.blocked_by
             if reason is None:
                 raise RuntimeError("blocked GridWorld step did not include a reason")
