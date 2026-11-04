@@ -131,6 +131,22 @@ def test_positive_and_negative_evidence_change_relative_likelihood_as_expected()
     assert negative_belief.probabilities[0, 0] < negative_belief.probabilities[0, 1]
 
 
+@pytest.mark.parametrize("positive", [True, False])
+def test_uninformative_sensor_does_not_change_the_belief(positive):
+    belief = BeliefMap(3, 1, (), ((0, 0), (1, 0), (2, 0)), "M")
+    prior = belief.probabilities.copy()
+    uninformative = SensorConfig(
+        detection_radius=1,
+        sensitivity=0.4,
+        false_positive_probability=0.4,
+    )
+
+    belief.update(make_observation(positive=positive, config=uninformative))
+
+    np.testing.assert_array_equal(belief.probabilities, prior)
+    assert belief.stats.entropy_bits == pytest.approx(math.log2(3))
+
+
 def test_multiple_observations_and_reproducible_map_updates():
     def run() -> BeliefMap:
         belief = BeliefMap(
@@ -341,3 +357,23 @@ def test_identical_seed_and_action_sequence_reproduce_observations_and_belief():
 
     assert first_observations == second_observations
     np.testing.assert_array_equal(first_belief, second_belief)
+
+
+def test_creating_a_new_mission_starts_with_a_fresh_uniform_prior():
+    config = MissionConfig(seed=5, drone_count=2, max_ticks=20)
+    previous_mission = create_simulation(config)
+    previous_mission.scan("01")
+
+    new_mission = create_simulation(config)
+
+    assert new_mission.observations == ()
+    assert new_mission.belief_map.observation_count == 0
+    expected_probability = 1 / len(new_mission.belief_map.candidate_positions)
+    assert new_mission.belief_map.probabilities.sum() == pytest.approx(1)
+    for x, y in new_mission.belief_map.candidate_positions:
+        assert new_mission.belief_map.probabilities[y, x] == pytest.approx(
+            expected_probability
+        )
+    assert new_mission.belief_stats.entropy_bits == pytest.approx(
+        math.log2(len(new_mission.belief_map.candidate_positions))
+    )
