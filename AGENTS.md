@@ -38,16 +38,27 @@ Nightjar is a **local-first, Python-only, simulation-only** research/portfolio a
 
 ## 5. Agent working method (every task)
 1. Read `AGENTS.md`, `NEXT.md`, `docs/DESIGN.md`, `README.md`, and relevant code/tests before modifying files.
-2. Write a brief implementation plan listing the **smallest files** to touch. Respect the current milestone.
+2. Write a brief implementation plan listing the **smallest files** to touch, explicit acceptance criteria and definition of done. A short checklist is enough for a small task. Respect the current milestone.
 3. Implement one vertical slice, favoring the simplest correct code. Do not refactor unrelated code.
 4. Add/extend tests for new logic and deterministic edge cases.
 5. Run `python -m pytest -q` and any appropriate package/import/smoke checks. Launch the Textual app if the environment supports a terminal. Report explicitly if UI execution cannot be verified.
 6. Summarize changed files, tests executed, what remains mock/demo, and any known limitations.
-7. Update `NEXT.md` with **one actionable next milestone** and acceptance criteria when the current milestone is complete. Update `README.md` / `docs/DESIGN.md` only if actual behavior or decisions changed.
+7. Update `NEXT.md` with **one actionable next milestone** and acceptance criteria when the current milestone is complete; this is a handoff, not authorization to execute it. Never automatically start the next milestone. Update `README.md` / `docs/DESIGN.md` only if actual behavior or decisions changed.
 8. Update `AGENTS.md` **only when durable architectural, workflow, design or scope rules change**. Preserve user-approved constraints. Add a short dated entry to the Decision Log rather than rewriting the file repeatedly. If there is a conflict with a new user instruction, follow the user and update this file accordingly.
 
-## 6. First milestone for the supplied starter
-Follow `NEXT.md`: implement `src/nightjar/core/world.py` with a small deterministic `GridWorld`, obstacles, one virtual agent, and a `step(direction)` API. Test legal movement, out-of-bounds/wall blocking, and reproducibility. Integrate with the existing TUI only if it is a small, safe extension after core tests pass; otherwise retain the clearly labeled scripted demo. **Do not** implement Bayesian inference, multi-agent planning, FastAPI, databases, or a full project rewrite in this first task.
+## 6. Repository workflow and delegation
+- `NEXT.md` points to the active spec; `docs/ROADMAP.md` records milestone status. Inspect local code rather than assuming milestone labels prove behavior.
+- `docs/ARCHITECTURE.md` describes current modules; `docs/DESIGN.md` owns UI decisions; `docs/WORKFLOW.md` owns setup, gates, handoffs and reporting.
+- Follow existing typed dataclasses, enums, explicit imports and small pure functions. Keep `[y, x]` arrays distinct from `(x, y)` coordinates.
+- Use native subagents for bounded specialist work when useful. Small edits stay with the lead. Normal features need independent actual-diff review; high-risk math, scheduling, events and architecture need architecture analysis, simulation review and QA.
+- Read-only reviewers must not edit implementation. Assign file ownership to writers; avoid concurrent shared-file edits. Limit concurrency to three specialists or the client's lower limit. Only the lead delegates.
+- Use `.agents/skills/feature-delivery/` for substantial delivery and `simulation-verification/` for numerical/deterministic checks. Roles live in `.codex/agents/`.
+- Use feature branches for substantial changes. Preserve existing work. Obtain human approval for material architecture/product/semantics decisions and before commits, pushes or merges; no automatic destructive Git operations.
+- Record substantial delivery evidence in a PR or concise `docs/reports/` report, including actual agent invocations, findings, corrections, commands/results and unresolved criteria.
+- Routine repository edits, tests, documentation and bounded independent analysis/review are authorized within the task; do not ask repeatedly for those operations or each delegation. Approval already granted for a specific action persists within its scope.
+- Ask before adding dependencies, significant architecture changes, destructive operations or external writes, as well as the Git integration actions above. Sandbox/automatic-review approval alone is not human authorization for these actions.
+- Iterate on implementation, tests and blocking findings within approved scope. Stop and report when acceptance criteria and definition of done are met, a blocker needs human intervention, or the next change would exceed scope. Do not broaden scope to fix unrelated findings.
+- Read-only provisional planning of the next milestone may run during implementation. Label it provisional, keep it out of the active implementation, and reconcile it with final integrated code before execution; execution still needs a new task authorization.
 
 ## 7. Definition of done
 - The project installs and starts with documented commands where dependencies are available.
@@ -57,4 +68,6 @@ Follow `NEXT.md`: implement `src/nightjar/core/world.py` with a small determinis
 - The military-style TUI design and Python-only architecture are preserved.
 
 ## Decision Log
+- 2026-11-03: Clarified task-scoped autonomy, explicit acceptance/stopping criteria, approval for dependencies and consequential actions, and provisional planning without automatic milestone execution. Use a read-only parent session for enforced filesystem review; native subagents inherit permissions.
+- 2026-11-03: Adopted repository-local native Codex specialists, delivery/verification skills, specifications and incremental CI gates. Human approval is required before commit, push or merge. Milestone instructions now live in NEXT/specs rather than global rules.
 - 2026-10-24: Approved a small-scale, local-first Python/Textual terminal product with understated military styling. No web frontend, zoom/pan, advanced map navigation, separate FastAPI server, or unnecessary infrastructure for MVP. Keep potential systems expansion optional and evidence-driven.

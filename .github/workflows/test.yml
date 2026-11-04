@@ -11,4 +11,17 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install -e '.[dev]'
+      - run: python -m ruff check src tests
+      - run: >-
+          python -m ruff format --check
+          src/nightjar/core/sensor.py src/nightjar/core/provider.py
+          src/nightjar/core/replay.py src/nightjar/tui/app.py
+          src/nightjar/benchmark.py
+          tests/test_world.py tests/test_sensor.py tests/test_demo.py
+          tests/test_replay.py tests/test_tui_replay.py
+          tests/test_benchmark.py
+      - run: python -m mypy
       - run: python -m pytest -q
+      - run: python -m pip wheel . --no-deps --wheel-dir dist
+      - run: python -m nightjar --help
+      - run: python -m nightjar.benchmark --help

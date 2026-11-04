@@ -8,7 +8,7 @@ The project is simulation-only: it does not control real drones or connect to ph
 
 The normal startup opens a mission configuration form followed by a separate preflight review. It validates an operation name, one of two environment presets, 1–10 drones, a supported map size, initial MANUAL or IDLE control, a positive tick budget, a nonnegative seed, and available spawn cells. Confirmed settings deterministically initialize the GridWorld and drone fleet.
 
-The running GridWorld TUI displays each drone's position and operational mode. Drones have independent movement histories and visited cells; movement and obstacle, boundary, and drone collision rules are handled by the core simulation. `M` toggles the selected drone between MANUAL and AUTO; `I` sets it to IDLE. The configured planner policy is separate from this per-drone control mode. In this milestone only the selected AUTO drone executes; selecting another drone does not run it concurrently. Each mission has one hidden, stationary synthetic point of interest, and `E` records a manual proximity scan. A shared Bayesian belief map updates from observations and is displayed with `H`; planner inputs exclude the target's actual location.
+The running GridWorld TUI displays each drone's position and operational mode. Drones have independent movement histories and visited cells; movement and obstacle, boundary, and drone collision rules are handled by the core simulation. `M` toggles the selected drone between MANUAL and AUTO; `I` sets it to IDLE. The configured planner policy is separate from this per-drone control mode. Currently only the selected AUTO drone executes in the TUI; selecting another drone does not run it concurrently. Hybrid manual-one/others-AUTO control remains a follow-up. Each mission has one hidden, stationary synthetic point of interest, and `E` records a manual proximity scan. A shared Bayesian belief map updates from observations and is displayed with `H`; planner inputs exclude the target's actual location.
 
 Environment presets are **Open field** and **Obstacle field**; map sizes are **Compact** (16×12), **Standard** (32×16), and **Extended** (40×20). Sensor configuration offers **High reliability**, **Standard**, and **Degraded** presets. Mission execution stops when its configured tick budget is exhausted or the active autonomous planner has no eligible action.
 
@@ -34,7 +34,37 @@ The information-gain expectation uses the same Manhattan-radius sensitivity/fals
 
 In GridWorld mode, press `M` to toggle MANUAL/AUTO (an IDLE drone returns to MANUAL), `N` to execute one manual step or one AUTO planner action, and `Space` to play/pause automatic stepping for the selected AUTO drone. `W`/`A`/`S`/`D` and `E` remain manual controls and are denied for AUTO/IDLE drones. Planner policy and current mode appear in telemetry; the existing timeline panel shows the latest decision, estimated information gain, and travel cost when applicable.
 
-The original scripted three-agent demonstration remains available with `--mode demo`. Its synthetic heatmap is illustrative, not Bayesian inference; agent routes and statuses are scripted.
+### Mission replay
+
+GridWorld missions retain an initial public snapshot and ordered typed events for
+committed actions. Press `R` to pause and view the latest recorded snapshot, then
+`Left` / `Right` to seek with clamped endpoints. Snapshot numbers are separate from
+ticks: mode changes and planner exhaustion can commit history without advancing time.
+The map, telemetry, belief, observations, events and planner decision all come from
+the selected historical snapshot. Movement, scans, mode changes, stepping and autoplay
+are disabled while viewing replay; drone selection and overlays remain available.
+Press `R` again to return to the unchanged live mission, still paused.
+
+Core callers can use `simulation.history.to_json()` and
+`ReplayTimeline.from_json(text)` from `nightjar.core.replay` to serialize and validate
+a separate, read-only timeline. Archives contain no hidden objective or RNG state;
+they support viewing rather than resuming simulation. There is no save/load file
+dialog or automatic disk persistence.
+
+History retains at least 2048 snapshots by default, or `2 * max_ticks + 1` when larger.
+If capacity is reached, the next committed mutation is rejected before state or RNG
+changes; the TUI reports `HISTORY FULL`. Core callers can set `history_capacity`
+explicitly. Full snapshots include cumulative observation/path references and belief
+grids, so memory and archive size grow with mission length; serialization is an
+explicit API operation, not part of the UI timer.
+
+The fleet API preserves stable drone-roster ordering and mission-wide planner
+exhaustion. Partial rounds stop at tick-budget exhaustion and commit once. Direct
+manual/selected-AUTO calls also commit history, so the existing TUI cannot bypass it.
+Queue preparation is not an executed action. Invalid actions and terminal no-ops do
+not create committed records; repeated identical mode settings are no-ops.
+
+The original scripted three-agent demonstration remains available with `--mode demo`. Its synthetic heatmap is illustrative, not Bayesian inference; agent routes and statuses are scripted. Its replay still recalculates demo frames.
 
 ## Requirements
 
@@ -89,9 +119,25 @@ Use `Tab` to move between fields. Adjust the 1–10 drone-count slider with `←
 | `H` | Toggle the mission belief heatmap / terrain, or show the demo heatmap |
 | `C` | Show visited-cell coverage |
 | `P` | Show movement paths |
-| `R` | Enter or exit scripted demo replay |
-| `Left` / `Right` | Seek in demo replay |
+| `R` | Enter or exit recorded GridWorld replay or scripted demo replay |
+| `Left` / `Right` | Seek one snapshot in GridWorld replay, or one demo tick |
 | `Q` | Quit |
+
+## Offline benchmarks
+
+For an offline comparison of the existing search policies:
+
+```powershell
+.\.venv\Scripts\python.exe -m nightjar.benchmark --seeds 0 1 2 --ticks 50
+```
+
+This emits reproducible JSON with raw per-seed metrics, descriptive means, protocol,
+software versions and source fingerprint. Add `--output benchmark-results.json` to
+create a new local file; existing files are never silently overwritten. Optional
+`--drones 3` uses the core all-AUTO fleet scheduler, not the current TUI's selected
+AUTO execution or a manual-one/others-AUTO handoff. See [methods and measured example](docs/BENCHMARKS.md)
+and the [release checklist](docs/RELEASE.md). No discovery or hardware-performance
+claims are made. Public release still requires owner decisions and approval.
 
 ## Tests
 
@@ -105,8 +151,13 @@ If the project is not installed in the active Python environment, install it wit
 
 ## Roadmap
 
-1. **Milestone 7: Hybrid Multi-Agent Autonomous Operations** — coordinate multiple AUTO drones safely through serial actions and the shared belief map while preserving manual/idle controls.
-2. Add deterministic event records and snapshot-based replay.
-3. Consider persistence only if a concrete requirement justifies it.
+See [the maintained roadmap](docs/ROADMAP.md) for milestone status and verified limitations.
+
+## Engineering workflow
+
+Start substantial feature work with **Use $feature-delivery for the active spec in NEXT.md**.
+See [workflow and Codex setup](docs/WORKFLOW.md), [actual architecture](docs/ARCHITECTURE.md),
+and the [specifications](docs/specs/). Repository-local agents and skills support planning, implementation,
+independent review and QA; integration requires human approval.
 
 Persistence or remote services will be considered only if a concrete requirement justifies them.
