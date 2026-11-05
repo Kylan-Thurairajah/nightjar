@@ -119,6 +119,7 @@ class BenchmarkReport:
                 "row_order": "seed_input_order_then_policy_order",
                 "budget": "global_simulation_ticks",
                 "planner_exhaustion": "mission_wide",
+                "coordination": "shared_coverage_soft_round_targets",
                 "coverage_denominator": "all_non_obstacle_cells_including_unreachable",
                 "coverage_includes_spawns": True,
                 "entropy_reduction": "initial_minus_final_bits",

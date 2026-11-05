@@ -20,7 +20,10 @@ environment, map, sensor, drone count and total simulation-tick ceiling. Drones 
 set AUTO in roster order; the existing core fleet scheduler runs until budget or
 mission-wide planner exhaustion. The default one-drone protocol isolates policy
 behavior. `--drones 3` explicitly benchmarks the core's all-AUTO fleet protocol; it
-does not represent the currently selected-AUTO-only TUI or implement hybrid handoff.
+does not represent user-driven hybrid TUI sessions: all benchmark drones are AUTO and there are no manual inputs.
+Fleet runs use shared visited coverage and FRONTIER/INFORMATION GAIN soft round-local
+target preferences. JSON labels this `shared_coverage_soft_round_targets`; RANDOM
+ignores target claims. Claims do not imply nonoverlapping routes or sensing areas.
 
 Equal budgets are equal ceilings, not a requirement to force an exhausted planner
 to spend ticks. A STOP from one drone ends the whole mission, and a final partial

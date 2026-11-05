@@ -14,12 +14,16 @@ jobs:
       - run: python -m ruff check src tests
       - run: >-
           python -m ruff format --check
+          src/nightjar/core/planning.py
           src/nightjar/core/sensor.py src/nightjar/core/provider.py
           src/nightjar/core/replay.py src/nightjar/tui/app.py
           src/nightjar/benchmark.py
+          src/nightjar/services/__init__.py src/nightjar/services/hybrid.py
           tests/test_world.py tests/test_sensor.py tests/test_demo.py
           tests/test_replay.py tests/test_tui_replay.py
           tests/test_benchmark.py
+          tests/test_hybrid.py tests/test_tui.py tests/test_tui_hybrid.py
+          tests/test_coordination.py tests/test_tui_coordination.py
       - run: python -m mypy
       - run: python -m pytest -q
       - run: python -m pip wheel . --no-deps --wheel-dir dist

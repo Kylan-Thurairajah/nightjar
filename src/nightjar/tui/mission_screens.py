@@ -327,13 +327,18 @@ class PreflightReviewScreen(Screen[MissionConfig | None]):
         )
 
     def on_mount(self) -> None:
+        control_detail = (
+            "01 MANUAL + AUTO fleet, paused"
+            if self.config.initial_control is OperationalMode.MANUAL
+            else "all drones parked, paused"
+        )
         self.query_one("#mission_summary", Static).update(
             f" OPERATION     {self.config.operation_name}\n"
             f" MISSION ID    {self.config.mission_id}\n"
             f" SCENARIO      {self.config.scenario.value.replace('_', ' ').upper()}\n"
             f" MAP           {self.config.width} × {self.config.height}\n"
             f" DRONES        {self.config.drone_count:02d}\n"
-            f" CONTROL       {self.config.initial_control.value}\n"
+            f" CONTROL       {self.config.initial_control.value}: {control_detail}\n"
             f" SENSOR        {self.config.sensor_preset.value.replace('_', ' ').upper()}\n"
             f" PLANNER       {self.config.search_strategy.label}\n"
             f" DETECTION     3 cells / Manhattan\n"
