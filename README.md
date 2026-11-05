@@ -8,7 +8,7 @@ The project is simulation-only: it does not control real drones or connect to ph
 
 The normal startup opens a mission configuration form followed by a separate preflight review. It validates an operation name, one of two environment presets, 1–10 drones, a supported map size, initial MANUAL or IDLE control, a positive tick budget, a nonnegative seed, and available spawn cells. Confirmed settings deterministically initialize the GridWorld and drone fleet.
 
-The running GridWorld TUI displays each drone's position and operational mode. Drones have independent movement histories and visited cells; movement and obstacle, boundary, and drone collision rules are handled by the core simulation. `M` toggles the selected drone between MANUAL and AUTO; `I` sets it to IDLE. The configured planner policy is separate from this per-drone control mode. Currently only the selected AUTO drone executes in the TUI; selecting another drone does not run it concurrently. Hybrid manual-one/others-AUTO control remains a follow-up. Each mission has one hidden, stationary synthetic point of interest, and `E` records a manual proximity scan. A shared Bayesian belief map updates from observations and is displayed with `H`; planner inputs exclude the target's actual location.
+The running GridWorld TUI displays each drone's position and operational mode. Drones have independent movement histories and visited cells; movement and obstacle, boundary, and drone collision rules are handled by the core simulation. `M` toggles the selected drone between MANUAL and AUTO; `I` sets it to IDLE. The configured planner policy is separate from this per-drone control mode. MANUAL launch assigns the first drone to the user and other active drones to AUTO, initially paused. The TUI runs the serial fleet scheduler independently of selection; selecting an active drone hands manual control to it and returns the previous controlled drone to AUTO. Explicit IDLE parking is preserved. Each mission has one hidden, stationary synthetic point of interest, and `E` records a manual proximity scan. A shared Bayesian belief map updates from observations and is displayed with `H`; planner inputs exclude the target's actual location.
 
 Environment presets are **Open field** and **Obstacle field**; map sizes are **Compact** (16×12), **Standard** (32×16), and **Extended** (40×20). Sensor configuration offers **High reliability**, **Standard**, and **Degraded** presets. Mission execution stops when its configured tick budget is exhausted or the active autonomous planner has no eligible action.
 
@@ -30,9 +30,16 @@ Choose **RANDOM**, **FRONTIER**, or **INFORMATION GAIN** in mission configuratio
 - **FRONTIER** scans each position once, then follows a shortest-path BFS route to a reachable unvisited cell bordering visited territory. When no such frontier remains, it routes to the nearest other reachable unvisited cell, then stops when coverage is complete.
 - **INFORMATION GAIN** computes expected entropy reduction for the sensor's positive and negative outcomes at each reachable, unscanned sensing location. It chooses the best `expected information gain - 0.01 bits × (movement ticks + scan tick)` utility and moves toward it one cell per action. Ties are resolved by travel cost, then row and column. The fixed cost coefficient is a simple, interpretable tradeoff, not a measured performance optimum. A position is scanned at most once by this policy; after all positive-utility unscanned positions are exhausted, it stops.
 
+AUTO planners share the fleet's visited coverage, including cells explored manually.
+Within each serial round, FRONTIER and INFORMATION GAIN prefer targets not already
+chosen by an earlier AUTO drone. These are soft preferences: routes and sensing
+areas can overlap, and planners reuse a claimed target when no eligible alternative
+exists. Claims reset each round; there are no fixed sectors or persistent assignments.
+RANDOM remains the seeded baseline. Single-drone policy behavior is preserved.
+
 The information-gain expectation uses the same Manhattan-radius sensitivity/false-positive likelihoods and Bayesian posterior as mission scans. Hypothetical calculations do not mutate the mission belief. Movement and scans remain separate one-tick actions, routed through the existing world and observation pipeline. A noisy positive reading is not a confirmed discovery. Autonomous missions end on tick-budget exhaustion or when the chosen planner has no eligible action; no ground-truth search-success score is awarded. Random and frontier exploration are baselines, not claims of optimal search.
 
-In GridWorld mode, press `M` to toggle MANUAL/AUTO (an IDLE drone returns to MANUAL), `N` to execute one manual step or one AUTO planner action, and `Space` to play/pause automatic stepping for the selected AUTO drone. `W`/`A`/`S`/`D` and `E` remain manual controls and are denied for AUTO/IDLE drones. Planner policy and current mode appear in telemetry; the existing timeline panel shows the latest decision, estimated information gain, and travel cost when applicable.
+In GridWorld mode, `Space` runs/pauses the whole AUTO fleet while the selected MANUAL drone stays under your control. `N` pauses autoplay and advances one fleet round; it never moves a MANUAL drone implicitly. Use `W`/`A`/`S`/`D` and `E` for explicit selected-MANUAL movement/scans, including while other drones run. Tab/1?3 hands control to an active drone. `M` toggles selected MANUAL/AUTO or explicitly reactivates IDLE as MANUAL; `I` parks selected without pausing other AUTO drones. Selecting IDLE does not wake it. IDLE launch keeps all drones parked, and Space does not start when no AUTO drone is available. A single drone can be released to AUTO with M. Planner policy and current mode appear in telemetry; the timeline shows fleet run/pause and the latest shared planner decision.
 
 ### Mission replay
 
@@ -43,7 +50,7 @@ ticks: mode changes and planner exhaustion can commit history without advancing 
 The map, telemetry, belief, observations, events and planner decision all come from
 the selected historical snapshot. Movement, scans, mode changes, stepping and autoplay
 are disabled while viewing replay; drone selection and overlays remain available.
-Press `R` again to return to the unchanged live mission, still paused.
+Press `R` again to return to the unchanged live mission and its saved selected drone, still paused. Replay selection never hands off live control. Entry waits for an already accepted operation to finish; pausing prevents later autonomous rounds but does not cancel a round already in flight.
 
 Core callers can use `simulation.history.to_json()` and
 `ReplayTimeline.from_json(text)` from `nightjar.core.replay` to serialize and validate
@@ -108,14 +115,14 @@ Use `Tab` to move between fields. Adjust the 1–10 drone-count slider with `←
 
 | Key | Action |
 | --- | --- |
-| `Space` | Play/pause demo; in GridWorld, run/pause the selected AUTO drone |
-| `N` | Advance one demo tick; one manual move; or one AUTO planner action |
+| `Space` | Play/pause demo; in GridWorld, run/pause all AUTO drones |
+| `N` | Advance one demo tick; in GridWorld, pause and step one fleet round |
 | `W` / `A` / `S` / `D` | Move the selected MANUAL drone one cell |
 | `E` | Manually scan with the selected MANUAL drone |
-| `Tab` | Cycle to the next drone |
-| `1` / `2` / `3` | Select RAVEN / GHOST / VIPER |
+| `Tab` | Hand control to the next active drone; parked IDLE stays parked |
+| `1` / `2` / `3` | Select/handoff RAVEN / GHOST / VIPER; view-only during replay |
 | `M` | Toggle selected GridWorld drone between MANUAL and AUTO |
-| `I` | Set selected GridWorld drone to IDLE |
+| `I` | Park selected drone; remaining AUTO drones continue |
 | `H` | Toggle the mission belief heatmap / terrain, or show the demo heatmap |
 | `C` | Show visited-cell coverage |
 | `P` | Show movement paths |
@@ -134,8 +141,8 @@ For an offline comparison of the existing search policies:
 This emits reproducible JSON with raw per-seed metrics, descriptive means, protocol,
 software versions and source fingerprint. Add `--output benchmark-results.json` to
 create a new local file; existing files are never silently overwritten. Optional
-`--drones 3` uses the core all-AUTO fleet scheduler, not the current TUI's selected
-AUTO execution or a manual-one/others-AUTO handoff. See [methods and measured example](docs/BENCHMARKS.md)
+`--drones 3` uses the core all-AUTO fleet scheduler, not the TUI's
+hybrid control: the benchmark has no manual user input. See [methods and measured example](docs/BENCHMARKS.md)
 and the [release checklist](docs/RELEASE.md). No discovery or hardware-performance
 claims are made. Public release still requires owner decisions and approval.
 

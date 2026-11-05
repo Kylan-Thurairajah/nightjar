@@ -13,6 +13,7 @@
   },
   "protocol": {
     "budget": "global_simulation_ticks",
+    "coordination": "shared_coverage_soft_round_targets",
     "coverage_denominator": "all_non_obstacle_cells_including_unreachable",
     "coverage_includes_spawns": true,
     "entropy_reduction": "initial_minus_final_bits",
@@ -206,7 +207,7 @@
       "core/planning.py",
       "core/replay.py"
     ],
-    "source_sha256": "63d6c739b7407326d640e5bf456fb36cd56866afeb448b66094427720994ce46"
+    "source_sha256": "606b681ef19083cdb70a1d3694315af6919ea813a8bc81d7c6ff80f80e2f2405"
   },
   "summaries": [
     {

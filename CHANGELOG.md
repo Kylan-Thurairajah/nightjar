@@ -5,7 +5,11 @@
 - Deterministic synthetic GridWorld missions, validated configuration and preflight.
 - Manual/AUTO/IDLE drone modes, collision checks, shared Bayesian inference and
   RANDOM, FRONTIER and INFORMATION GAIN policies.
-- Core serial fleet scheduling; the TUI currently runs selected AUTO only.
+- Hybrid fleet TUI control: one MANUAL drone, background AUTO drones, atomic
+  selection handoff, preserved IDLE parking, off-loop serialized commands and replay-safe
+  control restoration. Core serial fleet/global-budget rules remain unchanged.
+- Fleet-wide visited knowledge and soft round-local target preferences for FRONTIER
+  and INFORMATION GAIN; no fixed sectors or disjoint-route guarantee.
 - Immutable public mission history, validated JSON viewing archives and read-only
   replay controls, including compact-terminal replay visibility.
 - Offline reproducible policy benchmarking with raw metrics, descriptive means,

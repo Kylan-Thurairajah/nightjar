@@ -36,6 +36,7 @@ def test_identical_configuration_produces_identical_json_and_ordered_equal_budge
         assert run.coverage == run.visited_cells / run.traversable_cells
     data = json.loads(first.to_json())
     assert data["protocol"]["execution"] == "all_auto_serial_fleet_rounds"
+    assert data["protocol"]["coordination"] == "shared_coverage_soft_round_targets"
     assert data["configuration"]["drone_count"] == 3
     assert data["configuration"]["sensor_preset"] == "standard"
     assert len(data["software"]["source_sha256"]) == 64

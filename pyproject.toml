@@ -42,5 +42,5 @@ select = ["E4", "E7", "E9", "F"]
 
 [tool.mypy]
 python_version = "3.11"
-files = ["src/nightjar/core", "src/nightjar/benchmark.py"]
+files = ["src/nightjar/core", "src/nightjar/benchmark.py", "src/nightjar/services"]
 follow_imports = "silent"

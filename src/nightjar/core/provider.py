@@ -441,6 +441,44 @@ class GridWorldSimulation:
             )
             self._record("mode", drone.identifier, mode=drone.mode.value)
 
+    def set_hybrid_control(
+        self,
+        selected_id: str,
+        mode: OperationalMode | str | None = None,
+    ) -> GridWorldFrame:
+        """Atomically hand off manual control, preserving explicitly parked drones.
+
+        This opt-in presentation policy leaves direct simulation/benchmark APIs
+        unchanged. Selecting IDLE does not activate it; an explicit mode can.
+        """
+        selected = self._get_drone(selected_id)
+        requested = (
+            OperationalMode.IDLE
+            if mode is None and selected.mode is OperationalMode.IDLE
+            else OperationalMode.MANUAL
+            if mode is None
+            else OperationalMode(mode)
+        )
+        if selected.mode is OperationalMode.IDLE and requested is OperationalMode.AUTO:
+            requested = OperationalMode.IDLE
+        changes: list[tuple[str, OperationalMode]] = []
+        for drone in self._drones:
+            target = (
+                requested
+                if drone is selected
+                else OperationalMode.IDLE
+                if drone.mode is OperationalMode.IDLE
+                else OperationalMode.AUTO
+            )
+            if drone.mode is not target:
+                changes.append((drone.identifier, target))
+        if self._status is not MissionStatus.ACTIVE or not changes:
+            return self.frame()
+        with self._boundary():
+            for identifier, target in changes:
+                self.set_mode(identifier, target)
+        return self.frame()
+
     def fleet_round(self) -> GridWorldFrame:
         """Process each drone once in stable roster order, interleaving its mode."""
         if self._status is not MissionStatus.ACTIVE:
@@ -452,6 +490,7 @@ class GridWorldSimulation:
             return self.frame()
         with self._boundary():
             ordered_ids = [drone.identifier for drone in self._drones]
+            reserved_targets: set[Position] = set()
             for drone_id in ordered_ids:
                 if self._status is not MissionStatus.ACTIVE:
                     break
@@ -463,7 +502,18 @@ class GridWorldSimulation:
                     self._move_drone(drone, queued, autonomous=False)
                     continue
                 if drone.mode is OperationalMode.AUTO:
-                    self._resolve_autonomous_action(drone)
+                    self._resolve_autonomous_action(
+                        drone, reserved_targets=frozenset(reserved_targets)
+                    )
+                    decision = self._last_planner_decision
+                    if (
+                        decision is not None
+                        and decision.action.type is PlannerActionType.MOVE
+                        and decision.target is not None
+                        and drone.last_result is not None
+                        and drone.last_result.moved
+                    ):
+                        reserved_targets.add(decision.target)
             return self.frame()
 
     def step_fleet(self) -> GridWorldFrame:
@@ -539,7 +589,12 @@ class GridWorldSimulation:
             self._move_drone(drone, direction, autonomous=False)
             return self.frame()
 
-    def _resolve_autonomous_action(self, drone: _Drone) -> GridWorldFrame:
+    def _resolve_autonomous_action(
+        self,
+        drone: _Drone,
+        *,
+        reserved_targets: frozenset[Position] = frozenset(),
+    ) -> GridWorldFrame:
         """Execute the planner-selected action for a single AUTO drone."""
         if self._status is not MissionStatus.ACTIVE:
             return self.frame()
@@ -582,12 +637,15 @@ class GridWorldSimulation:
                 for cell_x in range(self._width)
                 if (cell_x, cell_y) not in self._obstacles
             ),
-            visited=frozenset(drone.visited),
+            visited=frozenset(
+                point for other in self._drones for point in other.visited
+            ),
             movement_history=tuple(drone.path),
             scanned_positions=scanned_positions,
             occupied_positions=occupied,
             permitted_moves=tuple(permitted_moves),
             scan_permitted=drone.world.position not in scanned_positions,
+            reserved_targets=reserved_targets,
             belief=self._belief_map.snapshot(),
             sensor_config=self._sensor_config,
             remaining_budget=(

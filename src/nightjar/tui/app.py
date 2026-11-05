@@ -1,6 +1,7 @@
 """Nightjar's first terminal application (Textual + Rich)."""
 
-from typing import Callable, Literal
+import asyncio
+from typing import Awaitable, Callable, Literal
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -13,6 +14,7 @@ from nightjar.core.mission import MissionConfig, create_simulation
 from nightjar.core.provider import GridWorldSimulation, MissionStatus
 from nightjar.core.replay import HistoryCapacityError, MissionSnapshot, ReplayTimeline
 from nightjar.core.world import Direction
+from nightjar.services.hybrid import ControlDeniedError, HybridMissionController
 from nightjar.tui.map_widget import MapWidget
 from nightjar.tui.mission_screens import MissionConfigScreen
 
@@ -63,6 +65,13 @@ class NightjarApp(App[None]):
             if gridworld_simulation is not None
             else create_simulation(self.mission_config)
         )
+        self._controller = HybridMissionController(self.gridworld_simulation)
+        self._command_lock = asyncio.Lock()
+        self._pending_commands = 0
+        self._generation = 0
+        self._configuration_pending = self._show_configuration
+        self._play_requested = False
+        self._play_request_revision = 0
         self.tick = 0
         self.playing = False
         self.replay_mode = False
@@ -71,7 +80,7 @@ class NightjarApp(App[None]):
         self.layer = "terrain" if self.mode == "gridworld" else "belief"
         self.selected_agent = 0
         self.selected_drone_id = "01"
-        initial_events = self.gridworld_simulation.frame().events
+        initial_events = self._controller.live_snapshot.frame.events
         self._ui_events = list(initial_events)
         self._seen_provider_events = set(initial_events)
 
@@ -128,8 +137,10 @@ class NightjarApp(App[None]):
 
     def on_mount(self) -> None:
         self._set_compact_layout(self.size.width, self.size.height)
-        self.set_interval(0.22, self._timer_tick)
+        self._mission_timer = self.set_interval(0.22, self._timer_tick)
         self._refresh_screen()
+        if not self._configuration_pending and self.mode == "gridworld":
+            self._submit_command(self._controller.initialize, "INITIALIZE")
         if self._show_configuration:
             self.push_screen(
                 MissionConfigScreen(self.mission_config),
@@ -150,40 +161,48 @@ class NightjarApp(App[None]):
             return
         self.mission_config = config
         self.gridworld_simulation = create_simulation(config)
+        self._controller = HybridMissionController(self.gridworld_simulation)
+        self._generation += 1
+        self._configuration_pending = False
         self.mode = "gridworld"
         self.tick = 0
         self.playing = False
+        self._play_requested = False
         self.replay_mode = False
         self._replay_timeline = None
         self._replay_index = 0
         self.selected_drone_id = "01"
         self.layer = "terrain"
         self._set_compact_layout(self.size.width, self.size.height)
-        initial_events = self.gridworld_simulation.frame().events
+        initial_events = self._controller.live_snapshot.frame.events
         self._ui_events = list(initial_events)
         self._seen_provider_events = set(initial_events)
+        self._submit_command(self._controller.initialize, "INITIALIZE")
         self._refresh_screen()
+
+    def _mission_available(self) -> bool:
+        return self.mode == "gridworld" and not self._configuration_pending
 
     def _timer_tick(self) -> None:
         if self.mode == "gridworld":
             if self.replay_mode:
                 self.playing = False
+                if not self._pending_commands:
+                    self._play_requested = False
                 return
-            if not self.playing:
+            if (
+                not self._mission_available()
+                or not self.playing
+                or self.replay_mode
+                or self._pending_commands
+                or self._controller.busy
+            ):
                 return
-            selected = self.gridworld_simulation.frame().drone(self.selected_drone_id)
-            if selected.mode.value != "AUTO":
-                self.playing = False
-                self._refresh_screen()
-                return
-            self._perform_live_action(
-                lambda: self.gridworld_simulation.autonomous_step(
-                    self.selected_drone_id
-                )
+            controller = self._controller
+            self._submit_command(
+                lambda: controller.fleet_round(should_run=lambda: self.playing),
+                "AUTO FLEET",
             )
-            if self.gridworld_simulation.frame().status is not MissionStatus.ACTIVE:
-                self.playing = False
-            self._refresh_screen()
             return
         if self.playing:
             self.tick = min(MAX_TICK, self.tick + 1)
@@ -191,49 +210,96 @@ class NightjarApp(App[None]):
                 self.playing = False
             self._refresh_screen()
 
-    def action_set_control(self, mode: str) -> None:
-        if self.mode != "gridworld" or self._replay_blocks_mutation():
-            return
-        if mode != "AUTO":
+    def _sync_controller(self) -> None:
+        controller = self._controller
+        self.selected_drone_id = controller.selected_drone_id
+        self.replay_mode = controller.replay_mode
+        self._replay_index = controller.replay_index
+        self._replay_timeline = controller.replay_history
+        live = controller.live_snapshot.frame
+        if (
+            self.replay_mode
+            or live.status is not MissionStatus.ACTIVE
+            or not any(drone.mode.value == "AUTO" for drone in live.drones)
+        ):
             self.playing = False
-        self._perform_live_action(
-            lambda: self.gridworld_simulation.set_mode(self.selected_drone_id, mode)
-        )
-        self._refresh_screen()
+            if self._pending_commands <= 1 or live.status is not MissionStatus.ACTIVE:
+                self._play_requested = False
+
+    def _submit_command(
+        self, command: Callable[[], Awaitable[object]], label: str
+    ) -> None:
+        """Reserve explicit input synchronously; serialize without blocking the UI."""
+        if not self._mission_available():
+            return
+        generation = self._generation
+        self._pending_commands += 1
+
+        async def perform() -> None:
+            try:
+                async with self._command_lock:
+                    if generation != self._generation:
+                        return
+                    previous_selection = self.selected_drone_id
+                    try:
+                        await command()
+                    except HistoryCapacityError as error:
+                        self.playing = False
+                        self._play_requested = False
+                        self._ui_events.append(f"HISTORY FULL / {error}")
+                    except ControlDeniedError as error:
+                        self._ui_events.append(f"{label} DENIED / {error}")
+                    except (ValueError, RuntimeError) as error:
+                        self.playing = False
+                        self._play_requested = False
+                        detail = (
+                            "MISSION INACTIVE"
+                            if label == "SCAN"
+                            and self._controller.live_snapshot.frame.status
+                            is not MissionStatus.ACTIVE
+                            else str(error)
+                        )
+                        self._ui_events.append(f"{label} DENIED / {detail}")
+                    finally:
+                        if generation == self._generation:
+                            self._sync_controller()
+                    if (
+                        previous_selection != self.selected_drone_id
+                        and not self.replay_mode
+                    ):
+                        drone = self._controller.live_snapshot.frame.drone(
+                            self.selected_drone_id
+                        )
+                        self._ui_events.append(
+                            f"[{self._controller.live_snapshot.frame.tick:04d}]  "
+                            f"SELECTED {drone.identifier} {drone.callsign}"
+                        )
+                    if self.is_running:
+                        self._refresh_screen()
+            finally:
+                self._pending_commands -= 1
+
+        self.run_worker(perform(), group="mission-commands", exclusive=False)
+
+    async def wait_for_commands(self) -> None:
+        """Wait for submitted explicit work, useful for deterministic UI tests."""
+        await self.workers.wait_for_complete()
+        if self.mode == "gridworld":
+            self._sync_controller()
+
+    def action_set_control(self, mode: str) -> None:
+        if not self._mission_available():
+            return
+        controller = self._controller
+        self._submit_command(lambda: controller.set_control(mode), "CONTROL")
 
     def action_toggle_control(self) -> None:
-        if self.mode != "gridworld" or self._replay_blocks_mutation():
+        if not self._mission_available():
             return
-        selected = self.gridworld_simulation.frame().drone(self.selected_drone_id)
-        next_mode = "AUTO" if selected.mode.value == "MANUAL" else "MANUAL"
-        if next_mode == "MANUAL":
-            self.playing = False
-        self._perform_live_action(
-            lambda: self.gridworld_simulation.set_mode(
-                self.selected_drone_id, next_mode
-            )
-        )
-        self._refresh_screen()
-
-    def _replay_blocks_mutation(self) -> bool:
-        if self.mode == "gridworld" and self.replay_mode:
-            self.playing = False
-            return True
-        return False
-
-    def _perform_live_action(self, action: Callable[[], object]) -> None:
-        """Keep a full replay archive from turning a live shortcut into a crash."""
-        try:
-            action()
-        except HistoryCapacityError as error:
-            self.playing = False
-            tick = self.gridworld_simulation.frame().tick
-            self._ui_events.append(f"[{tick:04d}] HISTORY FULL / {error}")
+        self._submit_command(self._controller.toggle_control, "CONTROL")
 
     def _gridworld_snapshot(self) -> MissionSnapshot:
-        if self.replay_mode and self._replay_timeline is not None:
-            return self._replay_timeline.snapshot(self._replay_index)
-        return self.gridworld_simulation.snapshot()
+        return self._controller.view_snapshot
 
     def _refresh_screen(self) -> None:
         if self.mode == "gridworld":
@@ -415,12 +481,12 @@ class NightjarApp(App[None]):
         replay_label = (
             f"REPLAY {self._replay_index + 1}/{len(self._replay_timeline.snapshots)} / READ ONLY"
             if self.replay_mode and self._replay_timeline is not None
-            else state
+            else f"FLEET {state}"
         )
         self.query_one("#timeline", Static).update(
             f" GRIDWORLD  /  TICK {frame.tick:04d}\n"
             f" {replay_label}\n"
-            " [dim]R replay / live  ← / → seek[/dim]\n"
+            " [dim]Space run  N step  R replay  ←/→[/dim]\n"
             f" {snapshot.search_strategy.label}\n"
             f"{planner_summary}\n"
             f" STATUS: {frame.status.value}"
@@ -428,20 +494,39 @@ class NightjarApp(App[None]):
 
     def action_toggle_play(self) -> None:
         if self.mode == "gridworld":
-            if self._replay_blocks_mutation():
+            if not self._mission_available():
                 return
-            selected = self.gridworld_simulation.frame().drone(self.selected_drone_id)
-            if selected.mode.value != "AUTO":
-                self._ui_events.append(
-                    f"[{self.tick:04d}] AUTO RUN DENIED / SELECTED DRONE NOT AUTO"
-                )
+            self._play_request_revision += 1
+            revision = self._play_request_revision
+            requested = not self._play_requested
+            self._play_requested = requested
+            if not requested:
                 self.playing = False
-                self._refresh_screen()
-                return
-            if self.gridworld_simulation.frame().status is not MissionStatus.ACTIVE:
-                self.playing = False
-                return
-            self.playing = not self.playing
+            controller = self._controller
+
+            async def apply_play() -> None:
+                # An older rejected resume must not cancel a newer run request.
+                if revision != self._play_request_revision:
+                    return
+                if controller.replay_mode:
+                    self.playing = False
+                    self._play_requested = False
+                    return
+                # N, replay or a later pause can supersede an earlier queued
+                # resume while its controller barrier is still pending.
+                if requested and not self._play_requested:
+                    return
+                if requested and await controller.can_run() and self._play_requested:
+                    self.playing = True
+                else:
+                    self.playing = False
+                    if requested:
+                        self._play_requested = False
+                        self._ui_events.append(
+                            "FLEET RUN DENIED / NO ACTIVE AUTO DRONES"
+                        )
+
+            self._submit_command(apply_play, "FLEET RUN")
             self._refresh_screen()
             return
         self.replay_mode = False
@@ -452,87 +537,40 @@ class NightjarApp(App[None]):
 
     def action_step(self) -> None:
         if self.mode == "gridworld":
-            if self._replay_blocks_mutation():
+            if not self._mission_available():
                 return
             self.playing = False
-            selected = self.gridworld_simulation.frame().drone(self.selected_drone_id)
-            if selected.mode.value == "AUTO":
-                self._perform_live_action(
-                    lambda: self.gridworld_simulation.autonomous_step(
-                        self.selected_drone_id
-                    )
-                )
-                self._refresh_screen()
-                return
-            if selected.mode.value != "MANUAL":
-                self._ui_events.append(
-                    f"[{self.tick:04d}]  {selected.identifier} {selected.callsign} "
-                    "MOVEMENT DENIED / NOT MANUAL"
-                )
-                self._refresh_screen()
-                return
-            self._perform_live_action(
-                lambda: self.gridworld_simulation.step(drone_id=self.selected_drone_id)
-            )
-            self._refresh_screen()
+            self._play_request_revision += 1
+            self._play_requested = False
+            self._submit_command(self._controller.fleet_round, "FLEET STEP")
             return
         self.playing = False
         self.tick = min(MAX_TICK, self.tick + 1)
         self._refresh_screen()
 
     def action_move(self, direction: str) -> None:
-        if self.mode == "gridworld":
-            if self._replay_blocks_mutation():
-                return
-            selected = self.gridworld_simulation.frame().drone(self.selected_drone_id)
-            if selected.mode.value != "MANUAL":
-                self._ui_events.append(
-                    f"[{self.tick:04d}]  {selected.identifier} {selected.callsign} "
-                    "MOVEMENT DENIED / NOT MANUAL"
-                )
-                self._refresh_screen()
-                return
-            self._perform_live_action(
-                lambda: self.gridworld_simulation.step(
-                    Direction(direction), drone_id=self.selected_drone_id
-                )
-            )
-            self._refresh_screen()
+        if not self._mission_available():
+            return
+        controller = self._controller
+        self._submit_command(lambda: controller.move(Direction(direction)), "MOVEMENT")
 
     def action_scan(self) -> None:
-        if self.mode != "gridworld" or self._replay_blocks_mutation():
+        if not self._mission_available():
             return
-        frame = self.gridworld_simulation.frame()
-        selected = frame.drone(self.selected_drone_id)
-        if selected.mode.value != "MANUAL":
-            self._ui_events.append(
-                f"[{frame.tick:04d}] SCAN DENIED / SELECTED DRONE NOT MANUAL"
-            )
-            self._refresh_screen()
-            return
-        if frame.status is not MissionStatus.ACTIVE:
-            self._ui_events.append(f"[{frame.tick:04d}] SCAN DENIED / MISSION INACTIVE")
-            self._refresh_screen()
-            return
-        self._perform_live_action(
-            lambda: self.gridworld_simulation.scan(self.selected_drone_id)
-        )
-        self._refresh_screen()
+        self._submit_command(self._controller.scan, "SCAN")
 
     def action_select_drone(self, drone_id: str) -> None:
         if self.mode == "gridworld":
-            frame = self._gridworld_snapshot().frame
-            try:
-                drone = frame.drone(drone_id)
-            except KeyError:
+            if not self._mission_available():
                 return
-            if drone.identifier != self.selected_drone_id:
-                self.selected_drone_id = drone.identifier
-                if not self.replay_mode:
-                    self._ui_events.append(
-                        f"[{frame.tick:04d}]  SELECTED {drone.identifier} {drone.callsign}"
-                    )
-                self._refresh_screen()
+            # Invalid keyboard roster entries are harmless, and this cached read
+            # cannot observe an in-flight provider round.
+            if drone_id not in {
+                d.identifier for d in self._gridworld_snapshot().frame.drones
+            }:
+                return
+            controller = self._controller
+            self._submit_command(lambda: controller.select(drone_id), "SELECT")
         else:
             index = int(drone_id) - 1
             if 0 <= index < 3:
@@ -552,46 +590,34 @@ class NightjarApp(App[None]):
 
     def action_next_agent(self) -> None:
         if self.mode == "gridworld":
-            drones = self._gridworld_snapshot().frame.drones
-            identifiers = [drone.identifier for drone in drones]
-            next_index = (identifiers.index(self.selected_drone_id) + 1) % len(
-                identifiers
-            )
-            self.action_select_drone(identifiers[next_index])
+            self._submit_command(self._controller.next_drone, "SELECT")
             return
         self.selected_agent = (self.selected_agent + 1) % 3
         self._refresh_screen()
 
     def action_toggle_replay(self) -> None:
         if self.mode == "gridworld":
+            if not self._mission_available():
+                return
             self.playing = False
-            if self.replay_mode:
-                self.replay_mode = False
-                self._replay_timeline = None
-            else:
-                self._replay_timeline = self.gridworld_simulation.history
-                self._replay_index = len(self._replay_timeline.snapshots) - 1
-                self.replay_mode = True
-            self._refresh_screen()
+            self._play_request_revision += 1
+            self._play_requested = False
+            self._submit_command(self._controller.toggle_replay, "REPLAY")
             return
         self.replay_mode = not self.replay_mode
         self.playing = False
         self._refresh_screen()
 
     def action_seek(self, direction: int) -> None:
-        if (
-            self.mode == "gridworld"
-            and self.replay_mode
-            and self._replay_timeline is not None
-        ):
-            self._replay_index = max(
-                0,
-                min(
-                    len(self._replay_timeline.snapshots) - 1,
-                    self._replay_index + direction,
-                ),
-            )
-            self._refresh_screen()
+        if self.mode == "gridworld":
+            if not self._mission_available():
+                return
+            controller = self._controller
+
+            async def seek_view() -> None:
+                controller.seek(direction)
+
+            self._submit_command(seek_view, "SEEK")
             return
         if self.mode == "demo" and self.replay_mode:
             self.tick = max(0, min(MAX_TICK, self.tick + direction))
