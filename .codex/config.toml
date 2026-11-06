@@ -1,0 +1,9 @@
+# Repository-local defaults; managed/client policy and explicit session overrides win.
+# Routine repository edits/checks proceed; consequential actions need human approval.
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
+approvals_reviewer = "user"
+
+# Inherit model and reasoning settings.
+[agents]
+max_concurrent_threads_per_session = 3

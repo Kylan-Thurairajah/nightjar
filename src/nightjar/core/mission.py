@@ -8,6 +8,7 @@ from enum import Enum
 
 from nightjar.core.planning import SearchStrategy
 from nightjar.core.provider import GridWorldSimulation, OperationalMode
+from nightjar.core.scenarios import facility_layout
 from nightjar.core.sensor import SensorConfig, SensorPreset
 from nightjar.core.world import GridWorld
 
@@ -15,6 +16,7 @@ from nightjar.core.world import GridWorld
 class ScenarioPreset(str, Enum):
     OPEN_FIELD = "open_field"
     OBSTACLE_FIELD = "obstacle_field"
+    FACILITY = "training_facility"
 
 
 class MapPreset(str, Enum):
@@ -71,10 +73,15 @@ def create_world(config: MissionConfig) -> GridWorld:
     if not isinstance(config.map_preset, MapPreset):
         raise ValueError("map_preset must be a supported MapPreset")
     width, height = config.map_preset.dimensions
+    if config.scenario is ScenarioPreset.FACILITY:
+        return GridWorld(
+            width=width,
+            height=height,
+            seed=config.seed,
+            obstacles=facility_layout(width, height).obstacles,
+        )
     obstacle_count = (
-        0
-        if config.scenario is ScenarioPreset.OPEN_FIELD
-        else width * height // 12
+        0 if config.scenario is ScenarioPreset.OPEN_FIELD else width * height // 12
     )
     return GridWorld(
         width=width,
@@ -91,7 +98,9 @@ def validate_mission_config(config: MissionConfig) -> tuple[ValidationCheck, ...
         ValidationCheck(
             "Operation name",
             isinstance(config.operation_name, str)
-            and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 _-]{0,39}", config.operation_name.strip())
+            and re.fullmatch(
+                r"[A-Za-z0-9][A-Za-z0-9 _-]{0,39}", config.operation_name.strip()
+            )
             is not None,
             "Use 1–40 letters, numbers, spaces, hyphens, or underscores.",
         )
@@ -129,7 +138,8 @@ def validate_mission_config(config: MissionConfig) -> tuple[ValidationCheck, ...
         ValidationCheck(
             "Initial control",
             isinstance(config.initial_control, OperationalMode)
-            and config.initial_control in (OperationalMode.MANUAL, OperationalMode.IDLE),
+            and config.initial_control
+            in (OperationalMode.MANUAL, OperationalMode.IDLE),
             "Drones start in MANUAL or IDLE control."
             if isinstance(config.initial_control, OperationalMode)
             and config.initial_control in (OperationalMode.MANUAL, OperationalMode.IDLE)
@@ -212,7 +222,9 @@ def validate_mission_config(config: MissionConfig) -> tuple[ValidationCheck, ...
 def create_simulation(config: MissionConfig) -> GridWorldSimulation:
     """Validate and initialize a mission's world and requested drone fleet."""
     checks = validate_mission_config(config)
-    failures = [f"{check.label}: {check.detail}" for check in checks if not check.passed]
+    failures = [
+        f"{check.label}: {check.detail}" for check in checks if not check.passed
+    ]
     if failures:
         raise ValueError("Invalid mission configuration:\n" + "\n".join(failures))
     return GridWorldSimulation(

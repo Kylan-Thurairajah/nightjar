@@ -29,6 +29,7 @@ Screen {
     width: 32;
     padding: 0 1;
     background: #0c1812;
+    overflow-y: auto;
 }
 
 .section_title {
@@ -52,7 +53,7 @@ Screen {
 }
 
 #agents {
-    height: 1fr;
+    height: auto;
     padding: 1 0 0 0;
     color: #add7b6;
     overflow: auto;
@@ -96,4 +97,101 @@ Screen {
 Footer {
     background: #122719;
     color: #b6e7bd;
+}
+
+/* Keep replay controls on screen in compact terminals; desktop sizing is unchanged. */
+Screen.compact #masthead {
+    height: 2;
+}
+
+Screen.compact #workspace {
+    min-height: 7;
+}
+
+Screen.compact #map_panel {
+    min-width: 0;
+}
+
+Screen.compact #telemetry_panel {
+    overflow-y: auto;
+}
+
+
+#mission_focus {
+    height: 2;
+    color: #9fcbab;
+    background: #102019;
+}
+
+#evidence {
+    height: auto;
+    max-height: 3;
+    color: #d6b66c;
+}
+
+MissionSummaryScreen {
+    align: center middle;
+    background: #080f0c 85%;
+}
+
+#mission_summary_panel {
+    width: 76;
+    max-width: 96%;
+    height: 23;
+    max-height: 96%;
+    border: solid #6b916d;
+    background: #0c1812;
+    padding: 0 1;
+}
+
+#summary_title {
+    height: 3;
+    content-align: left middle;
+    color: #e0b45c;
+    text-style: bold;
+}
+
+#summary_scroll {
+    height: 1fr;
+}
+
+#summary_body {
+    height: auto;
+    color: #b6d5b2;
+}
+
+#summary_close {
+    height: 3;
+    width: 100%;
+    background: #163420;
+    color: #b6e7bd;
+    border: solid #31543c;
+}
+
+Screen.compact #evidence {
+    max-height: 2;
+}
+
+
+/* Two content rows: room/scan legend must not lose a row to padding. */
+Screen.gridworld #legend {
+    padding-top: 0;
+}
+
+/* Preserve map rows and the whole replay status on a 24-row terminal. */
+Screen.compact.gridworld #bottom_panels {
+    height: 9;
+}
+
+Screen.compact.gridworld .section_title {
+    height: 1;
+    padding-top: 0;
+}
+
+Screen.compact.gridworld #map {
+    padding: 0 1;
+}
+
+Screen.compact.gridworld #events, Screen.compact.gridworld #timeline {
+    padding-top: 0;
 }
