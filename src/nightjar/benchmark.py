@@ -31,6 +31,7 @@ SOURCE_FILES = (
     "benchmark.py",
     "core/world.py",
     "core/mission.py",
+    "core/scenarios.py",
     "core/provider.py",
     "core/sensor.py",
     "core/belief.py",

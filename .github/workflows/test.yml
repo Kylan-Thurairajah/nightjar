@@ -15,6 +15,11 @@ jobs:
       - run: >-
           python -m ruff format --check
           src/nightjar/core/planning.py
+          src/nightjar/core/scenarios.py src/nightjar/core/mission.py
+          src/nightjar/tui/mission_screens.py src/nightjar/tui/map_widget.py
+          src/nightjar/tui/presentation.py src/nightjar/tui/comparison.py
+          src/nightjar/tui/drone_identity.py src/nightjar/tui/awareness.py
+          src/nightjar/services/comparison.py
           src/nightjar/core/sensor.py src/nightjar/core/provider.py
           src/nightjar/core/replay.py src/nightjar/tui/app.py
           src/nightjar/benchmark.py
@@ -24,6 +29,9 @@ jobs:
           tests/test_benchmark.py
           tests/test_hybrid.py tests/test_tui.py tests/test_tui_hybrid.py
           tests/test_coordination.py tests/test_tui_coordination.py
+          tests/test_facility.py tests/test_map_presentation.py tests/test_presentation.py
+          tests/test_comparison.py tests/test_tui_comparison.py
+          tests/test_site_features.py tests/test_drone_identity.py tests/test_field_awareness.py
       - run: python -m mypy
       - run: python -m pytest -q
       - run: python -m pip wheel . --no-deps --wheel-dir dist

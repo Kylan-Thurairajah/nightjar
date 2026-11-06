@@ -1,0 +1,23 @@
+ComparisonScreen {
+    background: #080f0c;
+    color: #a7d4b4;
+    padding: 0 1;
+}
+#comparison_title { height: 2; color: #e0b45c; text-style: bold; }
+#comparison_config { height: 2; color: #89c998; }
+#comparison_finals { height: 4; color: #b6d5b2; }
+#comparison_status { height: 2; color: #e0b45c; }
+#comparison_maps { height: 1fr; min-height: 3; }
+#comparison_panel_0, #comparison_panel_1 { width: 1fr; border: solid #2b4c38; }
+#comparison_label_0, #comparison_label_1 { height: 1; color: #e0b45c; text-style: bold; }
+#comparison_scroll_0, #comparison_scroll_1 { height: 1fr; overflow: auto; }
+#comparison_traces { height: 5; color: #89c998; }
+#comparison_controls { height: 2; color: #a7d4b4; }
+#comparison_buttons { height: 3; }
+#comparison_buttons Button { width: 1fr; height: 3; background: #163420; color: #b6e7bd; border: solid #31543c; }
+#comparison_buttons Button:focus { border: solid #e0b45c; }
+
+ComparisonScreen.short #comparison_title { height: 1; }
+ComparisonScreen.short #comparison_finals { height: 2; }
+ComparisonScreen.short #comparison_status { height: 1; }
+ComparisonScreen.short #comparison_traces { height: 3; }

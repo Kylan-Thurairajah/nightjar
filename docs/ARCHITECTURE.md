@@ -8,6 +8,7 @@ This describes the local implementation. Product constraints and the approved te
 
 | Module | Responsibility |
 | --- | --- |
+| `core/scenarios.py` | Deterministic authored training-facility walls and public room labels; no objective metadata |
 | `core/mission.py` | Frozen mission configuration, preset dimensions, centralized validation, world and simulation construction |
 | `core/world.py` | Integer grid geometry, seeded obstacles, hidden stationary objective, cardinal movement and explicit blocking results |
 | `core/provider.py` | Mission lifecycle, fleet state, control modes, action execution, observation collection, shared belief, typed public frames |
@@ -16,7 +17,9 @@ This describes the local implementation. Product constraints and the approved te
 | `core/belief.py` | Shared Bayesian posterior in log space, read-only probability snapshots, entropy and MAP statistics |
 | `core/planning.py` | Public planner input contract, RANDOM, FRONTIER and INFORMATION GAIN policies |
 | `core/demo.py` | Separate scripted three-agent demonstration and illustrative heatmap |
+| `services/comparison.py` | Isolated paired all-AUTO runs, immutable traces/raw report and shielded cancellation |
 | `services/hybrid.py` | FIFO mission commands, background core execution, committed caches and replay/control lifecycle |
+| `tui/presentation.py` | Public-snapshot brief/debrief statistics and readable evidence summaries |
 | `tui/` | Configuration/preflight, keyboard handling, telemetry and map rendering |
 | `benchmark.py` | Offline adapter over public core APIs, deterministic metrics/reporting and a standalone CLI |
 
@@ -112,3 +115,50 @@ and source/software provenance without timing or timestamps. See [methods](BENCH
 `tests/test_world.py`, `test_provider.py` and `test_mission.py` cover geometry, state transitions and configuration. `test_sensor.py`, `test_belief.py` and `test_planning.py` cover seeded observations, Bayesian calculations, numerical stability, expected information gain and planner isolation. `test_replay.py` covers deterministic multi-drone archives, direct/fleet/partial boundaries, capacity isolation, malformed loads, immutable beliefs and terminal/no-op behavior. `test_tui.py` and `test_tui_replay.py` use Textual pilots, including historical telemetry, blocked mutation keys and actual viewport/resize checks. `test_demo.py` checks the separate scripted demonstration. `test_hybrid.py` and `test_tui_hybrid.py` additionally check atomic control, threaded serialization/cancellation, cached publication, FIFO input, continued background AUTO, parking and replay barriers. The type gate covers core, service and benchmark modules; formatter coverage is still incremental. `test_coordination.py` and
 `test_tui_coordination.py` cover shared knowledge, soft claims/fallback and real-policy
 normal/narrow hybrid/replay integration.
+
+## Mission presentation
+
+Training facility is an original authored public geometry preset. Room labels derive
+only from the viewed frame's scenario, dimensions and matching walls; a historical
+frame is never relabelled using current live mission settings. Latest scan footprint
+uses the recorded observation position and Manhattan radius, without wall occlusion.
+Latest fleet target uses existing planner decision metadata and is not attributed to
+the selected drone. No archive version or sensing/planning algorithm changes.
+
+B opens a read-only brief/debrief behind the command barrier and pauses future AUTO
+scheduling. Its statistics derive from the viewed snapshot and timeline initial
+belief. Coverage is union physical visitation divided by non-wall cells, uncertainty
+is entropy, and MAP probability is confidence rather than confirmed discovery.
+
+## Matched comparison ownership
+
+V entry pauses future live scheduling and queues behind accepted commands before
+blocking underlying mission shortcuts. Comparison owns two fresh simulations made
+from the frozen mission configuration, never the live controller/provider. Its async
+service shields the actual executor future and signals a threading.Event on task
+cancellation, waiting for the thread to exit before ownership is released. The worker
+checks cancellation between rounds/policies; an already running round may finish.
+
+Comparison reports retain immutable public timelines and per-boundary coverage,
+scan-count and entropy points. Their raw JSON has explicit all-AUTO protocol,
+configuration and source/software provenance; comparison source extends the core
+fingerprint separately and does not alter standalone benchmark results. UI traces
+sample on uniform simulation tick positions, selecting latest committed snapshot at
+or before each tick; zero-tick mode boundaries resolve to the latest state, early
+terminal runs freeze, and no mid-round state is interpolated. No core schema change.
+
+## Field awareness and identities
+
+`tui/awareness.py` reconstructs a viewed public event prefix in one pass: accepted
+movement updates positions/visits and named-room entries; recorded scans drive first
+reading/positive-signal milestones; coverage thresholds and terminal messages use
+observed state. Equipment is excluded from room denominators. Doorway transit keeps
+the last named room to avoid spurious entry messages. Derived entries carry typed
+event sequence and are inserted after their causing movement, before a same-tick
+terminal message. Repeated rendering does not append duplicates or mutate live logs
+while replaying. Awareness adds no core/archive fields or hidden-state access.
+
+`tui/drone_identity.py` provides two-cell ASCII unit designators, stable numeric fallback
+and owner letters. All drone identities use neutral green; amber is selection-only. Main GridWorld display opts in; baseline renderer and
+comparison callers retain numeric defaults. Persistent tasks/verified discovery are
+specified separately in016; the latest target is not promoted to an assignment.

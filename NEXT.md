@@ -1,28 +1,28 @@
-# The next single task
+# Next task: Coordinated Assignments and Verified Discovery
 
-Fleet coordination is implemented and locally verified: **270 tests passed**, with
-architecture, implementation, simulation, QA and independent review. See
-[spec011](docs/specs/011-fleet-coordination.md) and [evidence](docs/reports/011-fleet-coordination.md).
+Field Awareness and Fleet Identity (015) is implemented and locally verified:
+**349 tests passed** after the grid-safe unit marker refinement. Compact ASCII unit designators/numeric display, owner-lettered trails,
+equipment/doorways, room-entry logs, room coverage and T milestones are available.
+See [spec015](docs/specs/015-field-awareness.md),
+[delivery evidence](docs/reports/015-field-awareness.md) and the manual guide.
 
-AUTO planners now share fleet visited coverage. FRONTIER and INFORMATION GAIN prefer
-unclaimed eligible targets within each serial round, falling back when needed.
-Routes/sensing areas may overlap; there are no fixed sectors or persistent claims.
-Hybrid controls and global stopping/budget rules remain unchanged.
+Next implement [spec016](docs/specs/016-coordinated-discovery.md):
 
-## Next: coordination manual acceptance and integration review
+- Persistent reachable search assignments, distinct owner markers and visible task
+  reasons; reallocate on manual takeover, parking, blocked/unreachable route,
+  completed scan and promising contact. Room boundaries remain passable.
+- SEARCHING / CONTACT / VERIFYING / CONFIRMED, with one verifier and other drones
+  continuing reconnaissance. A noisy positive reading or high belief is not success.
+- Explicit one-tick exact-cell synthetic verification, manual and AUTO; failed
+  verification updates the posterior, confirmed presence changes mission/UI outcome.
+- Typed operational snapshots and strict version-2 validation, preserving legacy
+  baseline benchmarks/comparisons and version-1 archive behavior.
+- Focused deterministic model/assignment/budget/verification/replay tests plus
+  architecture, simulation, QA and independent review. Run required regression gates.
 
-Use [the manual guide's milestone011 section](docs/MANUAL_TESTING.md#fleet-coordination-follow-up-milestone-011).
-Owner acceptance of the earlier hybrid controls is recorded; the coordination change
-has not yet been manually accepted by the owner.
-
-Acceptance criteria:
-
-- Run three drones with FRONTIER then INFORMATION GAIN. Move/scan selected MANUAL,
-  run other AUTO drones, check paths/coverage, handoff and parking. Shared transit
-  paths are valid; exact target avoidance has seeded automated evidence.
-- Verify N/pause, normal/compact layout and replay selection/exit preserve live state
-  and control. Record actual owner results and fix any reproducible blockers.
-- Review diff/report before integration; obtain explicit approval for commit, push
-  or merge. Existing uncommitted hybrid work must remain preserved.
-- Stop at acceptance/integration review. New features, license and public release
-  need separate authorization; do not automatically begin another product milestone.
+Reconcile the concrete016 spec with the final015 code before implementation.
+This handoff does not start016 automatically. Demo/blog014 remains deferred by owner
+preference. The owner authorized committing and pushing the current 012/013/015
+changes on 2026-11-06. Future commits, pushes, merges, new dependencies and
+publication require separate authorization. Owner manual acceptance of these
+changes remains unreported.

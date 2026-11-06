@@ -109,3 +109,34 @@ not establish a universally best policy. In an independent short-budget fixture
 (seed 3, two drones, seven ticks), INFORMATION GAIN spent all seven ticks moving
 and took no scans, leaving entropy unchanged. This illustrates why actual scans and
 metrics are reported rather than assuming intended information gathering succeeded.
+
+## Interactive paired view
+
+V in GridWorld opens a separate FRONTIER/INFORMATION GAIN all-AUTO comparison with
+real recorded maps/metrics and tick-aligned replay. It reuses configured settings,
+not the user's current action history. Workloads are bounded to1-1000ticks, with
+cooperative cancellation and no live-state mutation. The standalone benchmark
+runner/protocol is unchanged. API `run_comparison(config).to_json()` records raw
+per-boundary points and explicit software/source provenance; viewing writes no file.
+
+A [historical paired example](benchmarks/facility-pair-40.json) uses the original
+four-room Training facility before equipment islands were introduced,
+Compact, three AUTO drones, seed0, Standard sensor,40ticks, operation FACILITY-COMPARE.
+Both policies reached the budget. FRONTIER took21scans, visited13.02% of non-wall
+cells and ended at2.773751bits entropy; INFORMATION GAIN took3scans, visited23.08%
+and ended at6.893118bits. These two runs illustrate a coverage/uncertainty tradeoff,
+not a general ranking or a correctness/discovery claim. Source/software/rawpoints
+are recorded in the artifact. Its original layout is identified by its source
+fingerprint; current facility geometry differs. The recorded configuration was
+`run_comparison(MissionConfig(
+operation_name="FACILITY-COMPARE", scenario=ScenarioPreset.FACILITY,
+map_preset=MapPreset.COMPACT, drone_count=3, max_ticks=40, seed=0))` using the service
+API and enums from nightjar.core.mission. Do not overwrite unrelated result files.
+
+The [equipment-layout example](benchmarks/facility-equipment-pair-40.json) uses
+current authored geometry with eight blocking equipment cells. At the same Compact/
+Standard-sensor/three-drone/seed0/40tick settings (operation FACILITY-EQUIPMENT),
+FRONTIER records21scans,13.6646% physical coverage and2.652421bits entropy; INFORMATION
+GAIN records5scans,22.3602% coverage and2.427995bits. Both reach the budget. The scene
+changed, so differences from the old artifact are not an algorithmic improvement
+claim. Raw points and full configuration/source/software provenance are retained.
