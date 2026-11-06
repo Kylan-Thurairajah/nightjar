@@ -74,6 +74,7 @@ class PlannerState:
     belief: BeliefSnapshot
     sensor_config: SensorConfig
     remaining_budget: int | None
+    reserved_targets: frozenset[Position] = frozenset()
 
     def __post_init__(self) -> None:
         probabilities = np.array(self.belief.probabilities, dtype=np.float64, copy=True)
@@ -157,8 +158,11 @@ class FrontierPlanner:
                 PlannerAction(PlannerActionType.STOP),
                 "No reachable unvisited traversable cells remain.",
             )
+        unclaimed = [
+            point for point in destinations if point not in state.reserved_targets
+        ]
         target = min(
-            destinations,
+            unclaimed or destinations,
             key=lambda point: (len(paths[point]), point[1], point[0]),
         )
         direction = _first_direction(paths[target])
@@ -210,8 +214,11 @@ class InformationGainPlanner:
                 "No unscanned reachable position has positive information utility.",
             )
 
+        unclaimed = [
+            item for item in candidates if item[2] not in state.reserved_targets
+        ]
         utility, travel_cost, target, gain = min(
-            candidates,
+            unclaimed or candidates,
             key=lambda item: (-item[0], item[1], item[2][1], item[2][0]),
         )
         path = paths[target]
@@ -309,10 +316,9 @@ def expected_information_gains(
         out=np.zeros_like(weighted_negative),
         where=negative_probability[:, np.newaxis] > 0,
     )
-    expected_entropy = (
-        positive_probability * _entropy_rows(positive_posteriors)
-        + negative_probability * _entropy_rows(negative_posteriors)
-    )
+    expected_entropy = positive_probability * _entropy_rows(
+        positive_posteriors
+    ) + negative_probability * _entropy_rows(negative_posteriors)
     prior_entropy = _entropy_bits(prior)
     information_gains = np.maximum(0.0, prior_entropy - expected_entropy)
     return {
@@ -329,9 +335,7 @@ def _entropy_bits(probabilities: NDArray[np.float64]) -> float:
 def _entropy_rows(probabilities: NDArray[np.float64]) -> NDArray[np.float64]:
     entropy_terms = np.zeros_like(probabilities)
     nonzero = probabilities > 0
-    entropy_terms[nonzero] = probabilities[nonzero] * np.log2(
-        probabilities[nonzero]
-    )
+    entropy_terms[nonzero] = probabilities[nonzero] * np.log2(probabilities[nonzero])
     return -entropy_terms.sum(axis=1)
 
 
@@ -353,7 +357,11 @@ def _reachable_paths(state: PlannerState) -> dict[Position, tuple[Direction, ...
     while queue:
         current = queue.popleft()
         for neighbor in _neighbors(current):
-            if neighbor not in state.traversable or neighbor in blocked or neighbor in paths:
+            if (
+                neighbor not in state.traversable
+                or neighbor in blocked
+                or neighbor in paths
+            ):
                 continue
             dx = neighbor[0] - current[0]
             dy = neighbor[1] - current[1]

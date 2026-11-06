@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
-from typing import Iterable
+from typing import TYPE_CHECKING, Iterable, Iterator
+
+if TYPE_CHECKING:
+    from nightjar.core.replay import MissionSnapshot, ReplayTimeline
 
 from nightjar.core.belief import BeliefMap, BeliefSnapshot, BeliefStats
 from nightjar.core.planning import (
@@ -158,6 +162,7 @@ class GridWorldSimulation:
         scenario: str = "obstacle_field",
         sensor_config: SensorConfig | None = None,
         search_strategy: SearchStrategy = SearchStrategy.INFORMATION_GAIN,
+        history_capacity: int | None = None,
     ) -> None:
         if type(drone_count) is not int or not 1 <= drone_count <= len(DRONE_CALLSIGNS):
             raise ValueError(
@@ -241,12 +246,93 @@ class GridWorldSimulation:
         )
         if sensor_config is not None and not isinstance(sensor_config, SensorConfig):
             raise ValueError("sensor_config must be a SensorConfig")
-        self._sensor_config = sensor_config if sensor_config is not None else SensorConfig()
+        self._sensor_config = (
+            sensor_config if sensor_config is not None else SensorConfig()
+        )
         self._sensor = ProximitySensor(self._sensor_config, base_world.seed)
         self._observations: list[Observation] = []
         self._observation_sequences = {drone.identifier: 0 for drone in self._drones}
         self._manual_requests: dict[str, Direction] = {}
         self._reservations: dict[str, Position] = {}
+        from nightjar.core.replay import MissionEvent
+
+        capacity = max(2048, 2 * (max_ticks or 0) + 1)
+        if history_capacity is not None:
+            if type(history_capacity) is not int or history_capacity < 1:
+                raise ValueError("history_capacity must be a positive integer")
+            capacity = history_capacity
+        self._history_capacity = capacity
+        self._recorded_events: list[MissionEvent] = []
+        self._snapshots: list[MissionSnapshot] = []
+        self._capture_depth = 0
+        self._boundary_start = 0
+        self._snapshots.append(self.snapshot())
+
+    @property
+    def history(self) -> ReplayTimeline:
+        """Immutable committed history; queue preparation is not a committed action."""
+        from nightjar.core.replay import ReplayTimeline
+
+        return ReplayTimeline(tuple(self._snapshots), tuple(self._recorded_events))
+
+    def snapshot(self) -> MissionSnapshot:
+        """Copy public viewing state without exposing RNGs or hidden objectives."""
+        from nightjar.core.replay import MissionSnapshot
+
+        return MissionSnapshot(
+            index=max(0, len(self._snapshots) - (self._capture_depth == 0)),
+            event_sequence=len(self._recorded_events),
+            frame=self.frame(),
+            observations=self.observations,
+            belief=self.belief_map,
+            sensor_config=self.sensor_config,
+            search_strategy=self.search_strategy,
+            last_planner_decision=self.last_planner_decision,
+        )
+
+    @contextmanager
+    def _boundary(self) -> Iterator[None]:
+        self._begin_boundary()
+        try:
+            yield
+        finally:
+            self._end_boundary()
+
+    def _begin_boundary(self) -> None:
+        from nightjar.core.replay import HistoryCapacityError
+
+        if self._capture_depth == 0:
+            if len(self._snapshots) >= self._history_capacity:
+                raise HistoryCapacityError(
+                    "Mission history is full; replay/export the recorded mission "
+                    "or start a new mission before another action."
+                )
+            self._boundary_start = len(self._recorded_events)
+        self._capture_depth += 1
+
+    def _end_boundary(self) -> None:
+        self._capture_depth -= 1
+        if (
+            self._capture_depth == 0
+            and len(self._recorded_events) > self._boundary_start
+        ):
+            from dataclasses import replace
+
+            self._snapshots.append(replace(self.snapshot(), index=len(self._snapshots)))
+
+    def _record(self, kind: str, drone_id: str | None = None, **details: str) -> None:
+        from nightjar.core.replay import MissionEvent
+
+        self._recorded_events.append(
+            MissionEvent(
+                sequence=len(self._recorded_events) + 1,
+                tick=self._tick,
+                boundary=len(self._snapshots),
+                kind=kind,
+                drone_id=drone_id,
+                details=tuple(sorted(details.items())),
+            )
+        )
 
     def _initial_positions(
         self,
@@ -259,18 +345,13 @@ class GridWorldSimulation:
             (self._width - 1, 0),
             (0, self._height - 1),
         )
-        candidates = (first_position, *corners)
+        candidates: tuple[Position, ...] = (first_position, *corners)
         candidates += tuple(
-            (x, y)
-            for y in range(self._height)
-            for x in range(self._width)
+            (x, y) for y in range(self._height) for x in range(self._width)
         )
         positions: list[Position] = []
         for point in candidates:
-            if (
-                point not in self._obstacles
-                and point not in positions
-            ):
+            if point not in self._obstacles and point not in positions:
                 positions.append(point)
                 if len(positions) == count:
                     return tuple(positions)
@@ -324,8 +405,12 @@ class GridWorldSimulation:
     def reservations(self) -> frozenset[Position]:
         return frozenset(self._reservations.values())
 
-    def queue_manual_action(self, drone_id: str, direction: Direction | str) -> Direction:
+    def queue_manual_action(
+        self, drone_id: str, direction: Direction | str
+    ) -> Direction:
         """Queue one explicit movement for the next serial fleet round."""
+        if self._status is not MissionStatus.ACTIVE:
+            raise ValueError("cannot queue movement after the mission has ended")
         drone = self._get_drone(drone_id)
         if drone.mode is not OperationalMode.MANUAL:
             raise ValueError(f"drone {drone.identifier} is not in MANUAL mode")
@@ -334,6 +419,9 @@ class GridWorldSimulation:
         self._events.append(
             f"[{self._tick:04d}]  {drone.identifier} {drone.callsign} QUEUED MOVE {requested.value.upper()}"
         )
+        # Queue replacement is uncommitted preparation, so do not retain an
+        # unbounded string log while no simulation ticks are advancing.
+        self._events[:] = self._events[-8:]
         return requested
 
     def clear_manual_action(self, drone_id: str) -> None:
@@ -341,30 +429,92 @@ class GridWorldSimulation:
 
     def set_mode(self, drone_id: str, mode: OperationalMode | str) -> None:
         drone = self._get_drone(drone_id)
-        drone.mode = OperationalMode(mode)
-        self._reservations.pop(drone.identifier, None)
-        self._manual_requests.pop(drone.identifier, None)
-        self._events.append(
-            f"[{self._tick:04d}]  {drone.identifier} {drone.callsign} MODE {drone.mode.value}"
+        requested = OperationalMode(mode)
+        if self._status is not MissionStatus.ACTIVE or requested is drone.mode:
+            return
+        with self._boundary():
+            drone.mode = requested
+            self._reservations.pop(drone.identifier, None)
+            self._manual_requests.pop(drone.identifier, None)
+            self._events.append(
+                f"[{self._tick:04d}]  {drone.identifier} {drone.callsign} MODE {drone.mode.value}"
+            )
+            self._record("mode", drone.identifier, mode=drone.mode.value)
+
+    def set_hybrid_control(
+        self,
+        selected_id: str,
+        mode: OperationalMode | str | None = None,
+    ) -> GridWorldFrame:
+        """Atomically hand off manual control, preserving explicitly parked drones.
+
+        This opt-in presentation policy leaves direct simulation/benchmark APIs
+        unchanged. Selecting IDLE does not activate it; an explicit mode can.
+        """
+        selected = self._get_drone(selected_id)
+        requested = (
+            OperationalMode.IDLE
+            if mode is None and selected.mode is OperationalMode.IDLE
+            else OperationalMode.MANUAL
+            if mode is None
+            else OperationalMode(mode)
         )
+        if selected.mode is OperationalMode.IDLE and requested is OperationalMode.AUTO:
+            requested = OperationalMode.IDLE
+        changes: list[tuple[str, OperationalMode]] = []
+        for drone in self._drones:
+            target = (
+                requested
+                if drone is selected
+                else OperationalMode.IDLE
+                if drone.mode is OperationalMode.IDLE
+                else OperationalMode.AUTO
+            )
+            if drone.mode is not target:
+                changes.append((drone.identifier, target))
+        if self._status is not MissionStatus.ACTIVE or not changes:
+            return self.frame()
+        with self._boundary():
+            for identifier, target in changes:
+                self.set_mode(identifier, target)
+        return self.frame()
 
     def fleet_round(self) -> GridWorldFrame:
-        """Process queued manual actions first, then each AUTO drone in stable order."""
+        """Process each drone once in stable roster order, interleaving its mode."""
         if self._status is not MissionStatus.ACTIVE:
             return self.frame()
 
-        ordered_ids = [drone.identifier for drone in self._drones]
-        for drone_id in ordered_ids:
-            drone = self._get_drone(drone_id)
-            queued = self._manual_requests.pop(drone_id, None)
-            if queued is not None:
-                if drone.mode is not OperationalMode.MANUAL:
+        if not self._manual_requests and not any(
+            drone.mode is OperationalMode.AUTO for drone in self._drones
+        ):
+            return self.frame()
+        with self._boundary():
+            ordered_ids = [drone.identifier for drone in self._drones]
+            reserved_targets: set[Position] = set()
+            for drone_id in ordered_ids:
+                if self._status is not MissionStatus.ACTIVE:
+                    break
+                drone = self._get_drone(drone_id)
+                queued = self._manual_requests.pop(drone_id, None)
+                if queued is not None:
+                    if drone.mode is not OperationalMode.MANUAL:
+                        continue
+                    self._move_drone(drone, queued, autonomous=False)
                     continue
-                self._move_drone(drone, queued, autonomous=False)
-                continue
-            if drone.mode is OperationalMode.AUTO:
-                self._resolve_autonomous_action(drone)
-        return self.frame()
+                if drone.mode is OperationalMode.AUTO:
+                    self._resolve_autonomous_action(
+                        drone, reserved_targets=frozenset(reserved_targets)
+                    )
+                    decision = self._last_planner_decision
+                    if (
+                        decision is not None
+                        and decision.action.type is PlannerActionType.MOVE
+                        and decision.target is not None
+                        and drone.last_result is not None
+                        and drone.last_result.moved
+                    ):
+                        reserved_targets.add(decision.target)
+            return self.frame()
 
     def step_fleet(self) -> GridWorldFrame:
         return self.fleet_round()
@@ -380,38 +530,43 @@ class GridWorldSimulation:
         if self._status is not MissionStatus.ACTIVE:
             raise ValueError("cannot scan after the mission has ended")
         drone = self._get_drone(drone_id)
-        positive = self._sensor.scan(drone.world.position, self._objective_position)
-        self._tick += 1
-        self._observation_sequences[drone.identifier] += 1
-        observation = Observation(
-            mission_id=self._mission_id,
-            observation_id=f"{self._mission_id}-OBS-{len(self._observations) + 1:06d}",
-            drone_id=drone.identifier,
-            tick=self._tick,
-            position=drone.world.position,
-            sensor_type=SensorType.PROXIMITY,
-            positive=positive,
-            sensor_config=self._sensor_config,
-            sequence_number=self._observation_sequences[drone.identifier],
-        )
-        previous_entropy = self._belief_map.stats.entropy_bits
-        belief_stats = self._belief_map.update(observation)
-        self._observations.append(observation)
-        reading = "POSITIVE" if positive else "NEGATIVE"
-        auto_label = " AUTO" if drone.mode is OperationalMode.AUTO else ""
-        self._events.append(
-            f"[{self._tick:04d}]  {drone.callsign}{auto_label} SENSOR SCAN INITIATED"
-        )
-        self._events.append(
-            f"[{self._tick:04d}]  {drone.callsign} PROXIMITY: {reading} "
-            f"| ΔH {belief_stats.entropy_bits - previous_entropy:+.2f} bits"
-        )
-        if self._max_ticks is not None and self._tick >= self._max_ticks:
-            self._status = MissionStatus.BUDGET_EXHAUSTED
-            self._events.append(
-                f"[{self._tick:04d}]  MISSION COMPLETE / TICK BUDGET EXHAUSTED"
+        with self._boundary():
+            positive = self._sensor.scan(drone.world.position, self._objective_position)
+            self._tick += 1
+            self._observation_sequences[drone.identifier] += 1
+            observation = Observation(
+                mission_id=self._mission_id,
+                observation_id=f"{self._mission_id}-OBS-{len(self._observations) + 1:06d}",
+                drone_id=drone.identifier,
+                tick=self._tick,
+                position=drone.world.position,
+                sensor_type=SensorType.PROXIMITY,
+                positive=positive,
+                sensor_config=self._sensor_config,
+                sequence_number=self._observation_sequences[drone.identifier],
             )
-        return observation
+            previous_entropy = self._belief_map.stats.entropy_bits
+            belief_stats = self._belief_map.update(observation)
+            self._observations.append(observation)
+            reading = "POSITIVE" if positive else "NEGATIVE"
+            auto_label = " AUTO" if drone.mode is OperationalMode.AUTO else ""
+            self._events.append(
+                f"[{self._tick:04d}]  {drone.callsign}{auto_label} SENSOR SCAN INITIATED"
+            )
+            self._events.append(
+                f"[{self._tick:04d}]  {drone.callsign} PROXIMITY: {reading} "
+                f"| ΔH {belief_stats.entropy_bits - previous_entropy:+.2f} bits"
+            )
+            self._record(
+                "scan", drone.identifier, observation_id=observation.observation_id
+            )
+            if self._max_ticks is not None and self._tick >= self._max_ticks:
+                self._status = MissionStatus.BUDGET_EXHAUSTED
+                self._events.append(
+                    f"[{self._tick:04d}]  MISSION COMPLETE / TICK BUDGET EXHAUSTED"
+                )
+                self._record("terminal", status=self._status.value)
+            return observation
 
     def step(
         self,
@@ -430,10 +585,16 @@ class GridWorldSimulation:
         else:
             direction = Direction(direction)
 
-        self._move_drone(drone, direction, autonomous=False)
-        return self.frame()
+        with self._boundary():
+            self._move_drone(drone, direction, autonomous=False)
+            return self.frame()
 
-    def _resolve_autonomous_action(self, drone: _Drone) -> GridWorldFrame:
+    def _resolve_autonomous_action(
+        self,
+        drone: _Drone,
+        *,
+        reserved_targets: frozenset[Position] = frozenset(),
+    ) -> GridWorldFrame:
         """Execute the planner-selected action for a single AUTO drone."""
         if self._status is not MissionStatus.ACTIVE:
             return self.frame()
@@ -476,12 +637,15 @@ class GridWorldSimulation:
                 for cell_x in range(self._width)
                 if (cell_x, cell_y) not in self._obstacles
             ),
-            visited=frozenset(drone.visited),
+            visited=frozenset(
+                point for other in self._drones for point in other.visited
+            ),
             movement_history=tuple(drone.path),
             scanned_positions=scanned_positions,
             occupied_positions=occupied,
             permitted_moves=tuple(permitted_moves),
             scan_permitted=drone.world.position not in scanned_positions,
+            reserved_targets=reserved_targets,
             belief=self._belief_map.snapshot(),
             sensor_config=self._sensor_config,
             remaining_budget=(
@@ -496,9 +660,13 @@ class GridWorldSimulation:
             self._events.append(
                 f"[{self._tick:04d}]  {self._search_strategy.label} PLANNER EXHAUSTED"
             )
+            self._record("stop", drone.identifier)
+            self._record("terminal", status=self._status.value)
         elif action.type is PlannerActionType.SCAN:
             if not state.scan_permitted:
-                raise RuntimeError("planner returned a scan at an already scanned position")
+                raise RuntimeError(
+                    "planner returned a scan at an already scanned position"
+                )
             self.scan(drone.identifier)
         elif action.type is PlannerActionType.MOVE:
             if (
@@ -516,7 +684,11 @@ class GridWorldSimulation:
         if self._status is not MissionStatus.ACTIVE:
             return self.frame()
         drone = self._get_drone(drone_id)
-        return self._resolve_autonomous_action(drone)
+        if drone.mode is not OperationalMode.AUTO:
+            raise ValueError(f"drone {drone.identifier} is not in AUTO mode")
+        with self._boundary():
+            frame = self._resolve_autonomous_action(drone)
+            return frame
 
     def _move_drone(
         self,
@@ -526,21 +698,23 @@ class GridWorldSimulation:
         autonomous: bool,
     ) -> None:
         occupied = {
-            other.world.position
-            for other in self._drones
-            if other is not drone
+            other.world.position for other in self._drones if other is not drone
         }
         reserved = self._reservations.copy()
         for drone_id, destination in reserved.items():
             if drone_id != drone.identifier:
                 occupied.add(destination)
         if drone.identifier in self._reservations:
-            self._reservations[drone.identifier] = (drone.world.position[0], drone.world.position[1])
+            self._reservations[drone.identifier] = (
+                drone.world.position[0],
+                drone.world.position[1],
+            )
         result = drone.world.step(direction, occupied_positions=occupied)
         drone.last_direction = direction
         drone.last_result = result
         drone.visited.add(result.position)
         if result.moved:
+            event_result = "moved"
             drone.path.append(result.position)
             self._reservations[drone.identifier] = result.position
             description = (
@@ -552,6 +726,7 @@ class GridWorldSimulation:
             reason = result.blocked_by
             if reason is None:
                 raise RuntimeError("blocked GridWorld step did not include a reason")
+            event_result = reason.value
             reason_label = {
                 BlockReason.OBSTACLE: "WALL",
                 BlockReason.BOUNDARY: "BOUNDARY",
@@ -570,11 +745,19 @@ class GridWorldSimulation:
                 else f"{drone.callsign} AUTO BLOCKED {direction.value.upper()}"
             )
         self._events.append(f"[{self._tick:04d}]  {description}")
+        self._record(
+            "move" if result.moved else "blocked",
+            drone.identifier,
+            direction=direction.value,
+            control="AUTO" if autonomous else "MANUAL",
+            result=event_result,
+        )
         if self._max_ticks is not None and self._tick >= self._max_ticks:
             self._status = MissionStatus.BUDGET_EXHAUSTED
             self._events.append(
                 f"[{self._tick:04d}]  MISSION COMPLETE / TICK BUDGET EXHAUSTED"
             )
+            self._record("terminal", status=self._status.value)
 
     def _get_drone(self, drone_id: str) -> _Drone:
         for drone in self._drones:
