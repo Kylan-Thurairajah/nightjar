@@ -103,6 +103,11 @@ class MissionConfigScreen(Screen[MissionConfig | None]):
                             value=self.config.scenario is ScenarioPreset.OBSTACLE_FIELD,
                             id="scenario-obstacle",
                         )
+                        yield RadioButton(
+                            "TRAINING FACILITY",
+                            value=self.config.scenario is ScenarioPreset.FACILITY,
+                            id="scenario-facility",
+                        )
 
                     yield Static("DEPLOYMENT CONFIGURATION", classes="group_title")
                     with Horizontal(classes="field_row"):
@@ -113,7 +118,9 @@ class MissionConfigScreen(Screen[MissionConfig | None]):
                                 id="drone_count",
                                 classes="drone_slider",
                             )
-                            yield Label("Use ← / → to adjust; Home / End jump to limits.")
+                            yield Label(
+                                "Use ← / → to adjust; Home / End jump to limits."
+                            )
                     yield Label("Map dimensions")
                     with RadioSet(id="map_preset", classes="option_set"):
                         yield RadioButton(
@@ -147,7 +154,8 @@ class MissionConfigScreen(Screen[MissionConfig | None]):
                     with RadioSet(id="sensor_preset", classes="option_set"):
                         yield RadioButton(
                             "HIGH RELIABILITY  98% / 2%",
-                            value=self.config.sensor_preset is SensorPreset.HIGH_RELIABILITY,
+                            value=self.config.sensor_preset
+                            is SensorPreset.HIGH_RELIABILITY,
                             id="sensor-high",
                         )
                         yield RadioButton(
@@ -169,12 +177,14 @@ class MissionConfigScreen(Screen[MissionConfig | None]):
                         )
                         yield RadioButton(
                             "FRONTIER",
-                            value=self.config.search_strategy is SearchStrategy.FRONTIER,
+                            value=self.config.search_strategy
+                            is SearchStrategy.FRONTIER,
                             id="planner-frontier",
                         )
                         yield RadioButton(
                             "INFORMATION GAIN",
-                            value=self.config.search_strategy is SearchStrategy.INFORMATION_GAIN,
+                            value=self.config.search_strategy
+                            is SearchStrategy.INFORMATION_GAIN,
                             id="planner-information-gain",
                         )
 
@@ -189,7 +199,9 @@ class MissionConfigScreen(Screen[MissionConfig | None]):
         with Center():
             with Vertical(id="config_actions"):
                 yield Static("", id="form_error")
-                yield Button("NEXT: PREFLIGHT REVIEW  [ENTER]", id="next", variant="primary")
+                yield Button(
+                    "NEXT: PREFLIGHT REVIEW  [ENTER]", id="next", variant="primary"
+                )
         yield Static(
             " Tab navigate  ·  ←/→ adjust slider or highlight  ·  Space select  ·  Q quit",
             classes="mission_footer",
@@ -206,7 +218,9 @@ class MissionConfigScreen(Screen[MissionConfig | None]):
         try:
             config = self._read_config()
         except ValueError as error:
-            self.query_one("#form_error", Static).update(f"[amber]INPUT ERROR: {error}[/amber]")
+            self.query_one("#form_error", Static).update(
+                f"[amber]INPUT ERROR: {error}[/amber]"
+            )
             return
 
         failures = [
@@ -246,6 +260,7 @@ class MissionConfigScreen(Screen[MissionConfig | None]):
             scenario = {
                 "scenario-open": ScenarioPreset.OPEN_FIELD,
                 "scenario-obstacle": ScenarioPreset.OBSTACLE_FIELD,
+                "scenario-facility": ScenarioPreset.FACILITY,
             }[scenario_button.id]
             map_preset = {
                 "map-compact": MapPreset.COMPACT,
@@ -278,7 +293,9 @@ class MissionConfigScreen(Screen[MissionConfig | None]):
                 search_strategy=search_strategy,
             )
         except (ValueError, TypeError, KeyError) as error:
-            raise ValueError("counts, tick budget, and seed must be valid integers/options") from error
+            raise ValueError(
+                "counts, tick budget, and seed must be valid integers/options"
+            ) from error
 
     def _preflight_result(self, config: MissionConfig | None) -> None:
         if config is not None:
@@ -305,6 +322,19 @@ class PreflightReviewScreen(Screen[MissionConfig | None]):
         with VerticalScroll(id="preflight_scroll"):
             with Center():
                 with Vertical(id="preflight_panel"):
+                    yield Static("MISSION BRIEF", classes="group_title")
+                    yield Static(
+                        Text(
+                            f"Deploy {self.config.drone_count} drones to reduce uncertainty "
+                            f"about one hidden synthetic objective within "
+                            f"{self.config.max_ticks} action ticks.\n"
+                            "Readings are uncertain; high belief is not confirmation. "
+                            "Walls block movement, not the modeled sensor.\n"
+                            "Launch paused. Space runs available AUTO drones; "
+                            "WASD/E control your MANUAL drone."
+                        ),
+                        id="mission_brief",
+                    )
                     yield Static("MISSION SUMMARY", classes="group_title")
                     yield Static(id="mission_summary")
                     yield Static("ALLOCATED CALLSIGNS", classes="group_title")
@@ -349,7 +379,9 @@ class PreflightReviewScreen(Screen[MissionConfig | None]):
         )
         callsigns = [
             f" {index:02d}  {callsign}"
-            for index, callsign in enumerate(DRONE_CALLSIGNS[: self.config.drone_count], 1)
+            for index, callsign in enumerate(
+                DRONE_CALLSIGNS[: self.config.drone_count], 1
+            )
         ]
         self.query_one("#callsigns", Static).update("   ".join(callsigns))
         checks = validate_mission_config(self.config)

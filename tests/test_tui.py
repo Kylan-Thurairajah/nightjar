@@ -1,3 +1,4 @@
+from nightjar.tui.drone_identity import drone_marker
 import asyncio
 
 import pytest
@@ -27,7 +28,7 @@ def test_gridworld_renders_position_obstacles_and_neutral_cells():
     async def check_rendered_grid():
         async with app.run_test():
             map_text = app.query_one("#map", MapWidget).render().plain
-            assert "01" in map_text
+            assert drone_marker("01") in map_text
             assert "▓▓" in map_text
             assert "··" in map_text
             assert "██" not in map_text
@@ -156,7 +157,7 @@ def test_wasd_moves_use_world_step_and_preserve_coverage_and_path_layers():
             assert (
                 "TRAVEL HISTORY" in app.query_one("#map_title", Static).render().plain
             )
-            assert "••" in app.query_one("#map", MapWidget).render().plain
+            assert "R·" in app.query_one("#map", MapWidget).render().plain
 
             await pilot.press("d")
             await app.wait_for_commands()
@@ -253,10 +254,10 @@ def test_multi_drone_coverage_and_path_overlays_combine_agent_state():
             await pilot.press("p")
             await app.wait_for_commands()
             path_map = app.query_one("#map", MapWidget).render().plain
-            assert "••" in path_map
-            assert "01" in path_map
-            assert "02" in path_map
-            assert "03" in path_map
+            assert "R·" in path_map or "G·" in path_map
+            assert drone_marker("01") in path_map
+            assert drone_marker("02") in path_map
+            assert drone_marker("03") in path_map
 
     asyncio.run(check_aggregate_overlays())
 
@@ -577,7 +578,7 @@ def test_h_displays_shared_belief_heatmap_and_scan_updates_map_and_statistics():
                 "RELATIVE INTENSITY" in app.query_one("#legend", Static).render().plain
             )
             initial_map = app.query_one("#map", MapWidget).render().plain
-            assert "01" in initial_map and "▓▓" in initial_map
+            assert drone_marker("01") in initial_map and "▓▓" in initial_map
             assert "░░" in initial_map
 
             await pilot.press("e")
@@ -588,7 +589,7 @@ def test_h_displays_shared_belief_heatmap_and_scan_updates_map_and_statistics():
             assert simulation.belief_stats.entropy_bits != initial_entropy
             updated_map = app.query_one("#map", MapWidget).render().plain
             assert updated_map != initial_map
-            assert "01" in updated_map and "▓▓" in updated_map
+            assert drone_marker("01") in updated_map and "▓▓" in updated_map
             metrics = app.query_one("#metrics", Static).render().plain
             assert "BELIEF H" in metrics
             assert "ΔH / PRIOR" in metrics

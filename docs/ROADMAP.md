@@ -26,3 +26,29 @@ coordination follow-up is now implemented and locally verified: 270 tests passed
 See [spec011](specs/011-fleet-coordination.md) and [evidence](reports/011-fleet-coordination.md).
 The next task is coordination manual acceptance in [NEXT.md](../NEXT.md).
 Commits, pushes, merges and publication remain separate approval actions.
+
+## Approved presentation roadmap (2026-11-05)
+
+Owner approved these directions and immediate delivery of the first scoped slice.
+Implementation proceeds one reviewable slice at a time, without repeated routine
+approvals. Preserve current core mathematics and honest presentation of uncertainty.
+
+| Stage | Status | Acceptance |
+| --- | --- | --- |
+| 012 Mission presentation and debrief | Implemented locally; manual review pending | Named-room original facility, clear brief, scan footprint/evidence, latest fleet intent and accurate debrief; readable at80x24, replay-safe |
+| 013 Matched policy comparison | Implemented locally; manual review pending | Compare real FRONTIER/IG runs under same map/seed/fleet/tick ceiling; show coverage/uncertainty traces and actual stopping reasons; no assumed winner or misleading fair-outcome claim |
+| 014 Repeatable demo and engineering story | Deferred by owner: product first | Deterministic recorded walkthrough, concise captions/storyboard, screenshots/README, reproducible experiment and actual multi-agent development findings; distinguish simulated drones from coding agents; no automatic social publishing |
+| 015 Field awareness and fleet identity | Implemented locally; 338 tests passed | Animal identities, owner-colored paths, richer facility, room logs/coverage, honest milestones |
+| 016 Coordinated assignments and verified discovery | Next implementation slice | Durable reachable search/verify tasks, reallocation triggers, explicit verification, unmistakable confirmed outcome; public state and replay validation |
+
+The original floor plan is inspired by tactical games without copying game maps or
+assets. No real surveillance/physical sensing is introduced. Recording tools remain
+optional external tooling; no application dependency is added for video capture.
+
+## Product priority update
+
+Owner prioritizes what an observer can understand: distinct drones, purposeful
+coverage, field awareness and a visible search/contact/verification outcome.
+Replay remains a reliability tool rather than a headline. No restart-button milestone.
+Keep the aesthetic restrained and operational; no real hardware/feeds, combat or
+physical sensing claims. Detailed accepted scopes are spec015 and spec016.

@@ -201,13 +201,14 @@
       "benchmark.py",
       "core/world.py",
       "core/mission.py",
+      "core/scenarios.py",
       "core/provider.py",
       "core/sensor.py",
       "core/belief.py",
       "core/planning.py",
       "core/replay.py"
     ],
-    "source_sha256": "606b681ef19083cdb70a1d3694315af6919ea813a8bc81d7c6ff80f80e2f2405"
+    "source_sha256": "d5c8a96cbbc702749d0d680ad9554b1e7a551db79fed3a95bdc0f77dec5c1a92"
   },
   "summaries": [
     {

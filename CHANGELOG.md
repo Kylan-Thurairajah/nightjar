@@ -2,6 +2,13 @@
 
 ## Unreleased — local 0.1.0 preparation
 
+- Bird/owl/snake live drone emblems with G numeric fallback, owner-colored paths,
+  door/equipment field details, room-entry logs and T room coverage/milestones.
+- V matched-policy comparison: isolated paired all-AUTO experiments, real measured
+  coverage/entropy traces, common-tick recorded playback and safe cancellation.
+- Original named-room Training facility, snapshot-based latest scan/target overlays,
+  fleet activity/evidence summaries and B mission brief/debrief with honest public
+  metrics. Existing planner/sensing rules remain unchanged.
 - Deterministic synthetic GridWorld missions, validated configuration and preflight.
 - Manual/AUTO/IDLE drone modes, collision checks, shared Bayesian inference and
   RANDOM, FRONTIER and INFORMATION GAIN policies.

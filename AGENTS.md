@@ -12,7 +12,7 @@ Nightjar is a **local-first, Python-only, simulation-only** research/portfolio a
 - Visual style: near-black background, dark forest-green grids and panels, subdued green foreground, restrained amber for higher probability or noteworthy observations. Minimal effects; clear typography, no unnecessary animation.
 - Default world: approximately **32x16 cells**; small fixed-size maps, no zoom/pan or advanced navigation.
 - Main screen: top mission/status header; central colored block-character map; right agent telemetry and belief-state panel; bottom event log and replay area; discoverable keyboard shortcut footer.
-- Existing key map: Space play/pause; N single step; H heatmap; C coverage; P paths; Tab select agent; R replay; Left/Right seek when replaying; Q quit. A `?` shortcut help overlay may be added later if it improves discoverability.
+- Existing key map: Space play/pause; N single step; H heatmap; C coverage; P paths; Tab select agent; R replay; Left/Right seek when replaying; Q quit; B mission brief/debrief, T mission milestones, G unit-designator/numeric drone display, and V matched-policy comparison in GridWorld. A `?` shortcut help overlay may be added later if it improves discoverability.
 - Prefer effectiveness and legibility to decorative polish. Always test narrow terminal widths without sacrificing normal desktop terminal layout.
 - `docs/DESIGN.md` contains additional design details. Treat approved design as a constraint; ask before major aesthetic or workflow changes.
 
@@ -68,6 +68,10 @@ Nightjar is a **local-first, Python-only, simulation-only** research/portfolio a
 - The military-style TUI design and Python-only architecture are preserved.
 
 ## Decision Log
+- 2026-11-06: Owner rejected decorative insignia. Use grid-safe ASCII R1/G2/V3 designators and R/G/V trail letters, with numeric toggle. Preserve neutral identity colors and selection-only amber; verify actual two-column compositor placement.
+- 2026-11-06: Replace emoji with original monochrome tactical wing/optics/fang insignia. Drone identities use the same neutral green; only the selected drone marker/heading receives amber, regardless of MANUAL/AUTO/IDLE. Keep owner letters for trails and numeric fallback.
+- 2026-11-05: Owner prioritizes user-facing field awareness and operational outcomes over demo/blog/restart/replay polish. Preserve the first three IDs/callsigns with animal emblems and fallback; add truthful room/coverage milestones. Persistent assignments and verified synthetic beacon discovery are approved next operational scope, not claims about the existing belief-only model.
+- 2026-11-05: Approved a presentation roadmap: original named-room facility, snapshot-based scan/intent visuals and honest brief/debrief, followed by policy comparison and repeatable demo/story work. Preserve terminal design and existing inference; confidence is not objective confirmation. Use focused checks for UI slices rather than redundant numerical sweeps.
 - 2026-11-03: Clarified task-scoped autonomy, explicit acceptance/stopping criteria, approval for dependencies and consequential actions, and provisional planning without automatic milestone execution. Use a read-only parent session for enforced filesystem review; native subagents inherit permissions.
 - 2026-11-03: Adopted repository-local native Codex specialists, delivery/verification skills, specifications and incremental CI gates. Human approval is required before commit, push or merge. Milestone instructions now live in NEXT/specs rather than global rules.
 - 2026-10-24: Approved a small-scale, local-first Python/Textual terminal product with understated military styling. No web frontend, zoom/pan, advanced map navigation, separate FastAPI server, or unnecessary infrastructure for MVP. Keep potential systems expansion optional and evidence-driven.

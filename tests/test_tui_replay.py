@@ -94,7 +94,13 @@ def test_seek_renders_historical_positions_modes_observations_belief_and_events(
 
             expected_map = MapWidget()
             expected_map.show_gridworld_frame(
-                after_scan.frame, "belief", "01", after_scan.belief
+                after_scan.frame,
+                "belief",
+                "01",
+                after_scan.belief,
+                animal_icons=True,
+                styled_drones=True,
+                last_observation=after_scan.observations[-1],
             )
             actual_map = app.query_one("#map", MapWidget).render()
             assert actual_map == expected_map.render()

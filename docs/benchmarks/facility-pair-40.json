@@ -1,0 +1,318 @@
+{
+  "configuration": {
+    "drone_count": 3,
+    "initial_control": "MANUAL",
+    "map_preset": "compact",
+    "max_ticks": 40,
+    "operation_name": "FACILITY-COMPARE",
+    "scenario": "training_facility",
+    "search_strategy": "information_gain",
+    "seed": 0,
+    "sensor_preset": "standard"
+  },
+  "protocol": {
+    "budget": "global_simulation_tick_ceiling",
+    "configured_search_strategy_ignored": true,
+    "coordination": "shared_coverage_soft_round_targets",
+    "coverage_denominator": "all_non_obstacle_cells_including_unreachable",
+    "coverage_includes_spawns": true,
+    "entropy_change": "current_minus_initial_bits",
+    "execution": "all_auto_serial_fleet_rounds",
+    "initial_control_ignored": true,
+    "planner_exhaustion": "mission_wide",
+    "policy_order": [
+      "frontier",
+      "information_gain"
+    ],
+    "sensor_stream": "same_seed_different_paths_may_consume_differently",
+    "trace_sampling": "committed_snapshot_boundaries"
+  },
+  "runs": [
+    {
+      "final": {
+        "coverage": 0.1301775147928994,
+        "entropy_bits": 2.7737506928038513,
+        "entropy_change_bits": -4.592571521441965,
+        "scans": 21,
+        "terminal_reason": "BUDGET EXHAUSTED",
+        "tick": 40
+      },
+      "points": [
+        {
+          "coverage": 0.01775147928994083,
+          "entropy_bits": 7.366322214245816,
+          "scans": 0,
+          "snapshot_index": 0,
+          "tick": 0
+        },
+        {
+          "coverage": 0.01775147928994083,
+          "entropy_bits": 7.366322214245816,
+          "scans": 0,
+          "snapshot_index": 1,
+          "tick": 0
+        },
+        {
+          "coverage": 0.01775147928994083,
+          "entropy_bits": 7.366322214245816,
+          "scans": 0,
+          "snapshot_index": 2,
+          "tick": 0
+        },
+        {
+          "coverage": 0.01775147928994083,
+          "entropy_bits": 7.366322214245816,
+          "scans": 0,
+          "snapshot_index": 3,
+          "tick": 0
+        },
+        {
+          "coverage": 0.01775147928994083,
+          "entropy_bits": 6.020659158585469,
+          "scans": 3,
+          "snapshot_index": 4,
+          "tick": 3
+        },
+        {
+          "coverage": 0.03550295857988166,
+          "entropy_bits": 6.020659158585469,
+          "scans": 3,
+          "snapshot_index": 5,
+          "tick": 6
+        },
+        {
+          "coverage": 0.03550295857988166,
+          "entropy_bits": 3.6290403610415005,
+          "scans": 6,
+          "snapshot_index": 6,
+          "tick": 9
+        },
+        {
+          "coverage": 0.05325443786982249,
+          "entropy_bits": 3.6290403610415005,
+          "scans": 6,
+          "snapshot_index": 7,
+          "tick": 12
+        },
+        {
+          "coverage": 0.05325443786982249,
+          "entropy_bits": 3.8537829081762416,
+          "scans": 9,
+          "snapshot_index": 8,
+          "tick": 15
+        },
+        {
+          "coverage": 0.07100591715976332,
+          "entropy_bits": 3.8537829081762416,
+          "scans": 9,
+          "snapshot_index": 9,
+          "tick": 18
+        },
+        {
+          "coverage": 0.07100591715976332,
+          "entropy_bits": 3.2777257113551217,
+          "scans": 12,
+          "snapshot_index": 10,
+          "tick": 21
+        },
+        {
+          "coverage": 0.08875739644970414,
+          "entropy_bits": 3.2777257113551217,
+          "scans": 12,
+          "snapshot_index": 11,
+          "tick": 24
+        },
+        {
+          "coverage": 0.08875739644970414,
+          "entropy_bits": 3.0173636861577373,
+          "scans": 15,
+          "snapshot_index": 12,
+          "tick": 27
+        },
+        {
+          "coverage": 0.10650887573964497,
+          "entropy_bits": 3.0173636861577373,
+          "scans": 15,
+          "snapshot_index": 13,
+          "tick": 30
+        },
+        {
+          "coverage": 0.10650887573964497,
+          "entropy_bits": 2.8782804502258084,
+          "scans": 18,
+          "snapshot_index": 14,
+          "tick": 33
+        },
+        {
+          "coverage": 0.1242603550295858,
+          "entropy_bits": 2.8782804502258084,
+          "scans": 18,
+          "snapshot_index": 15,
+          "tick": 36
+        },
+        {
+          "coverage": 0.1242603550295858,
+          "entropy_bits": 2.7737506928038513,
+          "scans": 21,
+          "snapshot_index": 16,
+          "tick": 39
+        },
+        {
+          "coverage": 0.1301775147928994,
+          "entropy_bits": 2.7737506928038513,
+          "scans": 21,
+          "snapshot_index": 17,
+          "tick": 40
+        }
+      ],
+      "strategy": "frontier"
+    },
+    {
+      "final": {
+        "coverage": 0.23076923076923078,
+        "entropy_bits": 6.8931180627883,
+        "entropy_change_bits": -0.4732041514575158,
+        "scans": 3,
+        "terminal_reason": "BUDGET EXHAUSTED",
+        "tick": 40
+      },
+      "points": [
+        {
+          "coverage": 0.01775147928994083,
+          "entropy_bits": 7.366322214245816,
+          "scans": 0,
+          "snapshot_index": 0,
+          "tick": 0
+        },
+        {
+          "coverage": 0.01775147928994083,
+          "entropy_bits": 7.366322214245816,
+          "scans": 0,
+          "snapshot_index": 1,
+          "tick": 0
+        },
+        {
+          "coverage": 0.01775147928994083,
+          "entropy_bits": 7.366322214245816,
+          "scans": 0,
+          "snapshot_index": 2,
+          "tick": 0
+        },
+        {
+          "coverage": 0.01775147928994083,
+          "entropy_bits": 7.366322214245816,
+          "scans": 0,
+          "snapshot_index": 3,
+          "tick": 0
+        },
+        {
+          "coverage": 0.03550295857988166,
+          "entropy_bits": 7.366322214245816,
+          "scans": 0,
+          "snapshot_index": 4,
+          "tick": 3
+        },
+        {
+          "coverage": 0.05325443786982249,
+          "entropy_bits": 7.366322214245816,
+          "scans": 0,
+          "snapshot_index": 5,
+          "tick": 6
+        },
+        {
+          "coverage": 0.07100591715976332,
+          "entropy_bits": 7.366322214245816,
+          "scans": 0,
+          "snapshot_index": 6,
+          "tick": 9
+        },
+        {
+          "coverage": 0.08875739644970414,
+          "entropy_bits": 7.366322214245816,
+          "scans": 0,
+          "snapshot_index": 7,
+          "tick": 12
+        },
+        {
+          "coverage": 0.10650887573964497,
+          "entropy_bits": 7.366322214245816,
+          "scans": 0,
+          "snapshot_index": 8,
+          "tick": 15
+        },
+        {
+          "coverage": 0.11242603550295859,
+          "entropy_bits": 7.065814546480805,
+          "scans": 2,
+          "snapshot_index": 9,
+          "tick": 18
+        },
+        {
+          "coverage": 0.1242603550295858,
+          "entropy_bits": 6.8931180627883,
+          "scans": 3,
+          "snapshot_index": 10,
+          "tick": 21
+        },
+        {
+          "coverage": 0.13609467455621302,
+          "entropy_bits": 6.8931180627883,
+          "scans": 3,
+          "snapshot_index": 11,
+          "tick": 24
+        },
+        {
+          "coverage": 0.15384615384615385,
+          "entropy_bits": 6.8931180627883,
+          "scans": 3,
+          "snapshot_index": 12,
+          "tick": 27
+        },
+        {
+          "coverage": 0.17159763313609466,
+          "entropy_bits": 6.8931180627883,
+          "scans": 3,
+          "snapshot_index": 13,
+          "tick": 30
+        },
+        {
+          "coverage": 0.1893491124260355,
+          "entropy_bits": 6.8931180627883,
+          "scans": 3,
+          "snapshot_index": 14,
+          "tick": 33
+        },
+        {
+          "coverage": 0.20710059171597633,
+          "entropy_bits": 6.8931180627883,
+          "scans": 3,
+          "snapshot_index": 15,
+          "tick": 36
+        },
+        {
+          "coverage": 0.22485207100591717,
+          "entropy_bits": 6.8931180627883,
+          "scans": 3,
+          "snapshot_index": 16,
+          "tick": 39
+        },
+        {
+          "coverage": 0.23076923076923078,
+          "entropy_bits": 6.8931180627883,
+          "scans": 3,
+          "snapshot_index": 17,
+          "tick": 40
+        }
+      ],
+      "strategy": "information_gain"
+    }
+  ],
+  "schema_version": 1,
+  "software": {
+    "fingerprint": "benchmark_core_fingerprint_plus_services/comparison.py",
+    "nightjar_sim": "0.1.0",
+    "numpy": "2.5.4",
+    "python": "3.13.1",
+    "source_sha256": "12856c41cd292af9ab977af6503b48651731d8a1d7ff8df9824c7e728f050c57"
+  }
+}

@@ -1,6 +1,8 @@
 """Nightjar's first terminal application (Textual + Rich)."""
 
 import asyncio
+
+from rich.text import Text
 from typing import Awaitable, Callable, Literal
 
 from textual.app import App, ComposeResult
@@ -16,7 +18,17 @@ from nightjar.core.replay import HistoryCapacityError, MissionSnapshot, ReplayTi
 from nightjar.core.world import Direction
 from nightjar.services.hybrid import ControlDeniedError, HybridMissionController
 from nightjar.tui.map_widget import MapWidget
+from nightjar.tui.awareness import build_awareness, merge_room_entries
+from nightjar.tui.drone_identity import drone_color, drone_marker
+from nightjar.tui.comparison import ComparisonScreen
 from nightjar.tui.mission_screens import MissionConfigScreen
+from nightjar.tui.presentation import (
+    MissionSummaryScreen,
+    coverage,
+    evidence_text,
+    progress_bar,
+    room_name,
+)
 
 
 class NightjarApp(App[None]):
@@ -42,6 +54,10 @@ class NightjarApp(App[None]):
         Binding("m", "toggle_control", "Toggle manual / auto"),
         Binding("i", "set_control('IDLE')", "Idle control"),
         Binding("r", "toggle_replay", "Replay"),
+        Binding("b", "mission_summary", "Brief / Debrief"),
+        Binding("v", "comparison", "Compare policies"),
+        Binding("t", "mission_milestones", "Milestones"),
+        Binding("g", "toggle_drone_icons", "Unit IDs"),
         Binding("left", "seek(-1)", "Back", show=False),
         Binding("right", "seek(1)", "Forward", show=False),
         Binding("q", "quit", "Quit"),
@@ -70,6 +86,10 @@ class NightjarApp(App[None]):
         self._pending_commands = 0
         self._generation = 0
         self._configuration_pending = self._show_configuration
+        self._summary_open = False
+        self._comparison_open = False
+        self.animal_icons = True
+        self._seen_room_entries: set[int] = set()
         self._play_requested = False
         self._play_request_revision = 0
         self.tick = 0
@@ -103,6 +123,8 @@ class NightjarApp(App[None]):
                     id="map_title",
                     classes="section_title",
                 )
+                if self.mode == "gridworld":
+                    yield Static(id="mission_focus")
                 yield MapWidget(id="map")
                 legend = (
                     " ▓▓ WALL  01-10 DRONES  WASD MOVE  [E] SCAN  "
@@ -122,6 +144,8 @@ class NightjarApp(App[None]):
         with Horizontal(id="bottom_panels"):
             with Vertical(id="events_panel"):
                 yield Static("┌ SYSTEM EVENT LOG", classes="section_title")
+                if self.mode == "gridworld":
+                    yield Static(id="evidence")
                 yield Static(id="events")
             with Vertical(id="replay_panel"):
                 yield Static("┌ MISSION REPLAY", classes="section_title")
@@ -155,6 +179,7 @@ class NightjarApp(App[None]):
         # Keep the underlying screen ready for launch as well as the visible one.
         for screen in self.screen_stack:
             screen.set_class(height < 36 or width < 100, "compact")
+            screen.set_class(self.mode == "gridworld", "gridworld")
 
     def _on_mission_configured(self, config: MissionConfig | None) -> None:
         if config is None:
@@ -178,10 +203,16 @@ class NightjarApp(App[None]):
         self._ui_events = list(initial_events)
         self._seen_provider_events = set(initial_events)
         self._submit_command(self._controller.initialize, "INITIALIZE")
+        self._seen_room_entries.clear()
         self._refresh_screen()
 
     def _mission_available(self) -> bool:
-        return self.mode == "gridworld" and not self._configuration_pending
+        return (
+            self.mode == "gridworld"
+            and not self._configuration_pending
+            and not self._summary_open
+            and not self._comparison_open
+        )
 
     def _timer_tick(self) -> None:
         if self.mode == "gridworld":
@@ -354,6 +385,8 @@ class NightjarApp(App[None]):
 
     def _refresh_gridworld_screen(self, snapshot: MissionSnapshot) -> None:
         frame = snapshot.frame
+        history = self._controller.replay_history or self._controller.live_history
+        awareness = build_awareness(history, snapshot)
         self.tick = frame.tick
         selected = frame.drone(self.selected_drone_id)
         observations = snapshot.observations
@@ -371,6 +404,11 @@ class NightjarApp(App[None]):
             self.layer,
             self.selected_drone_id,
             snapshot.belief,
+            last_observation=last_observation,
+            planner_decision=snapshot.last_planner_decision,
+            animal_icons=self.animal_icons,
+            styled_drones=True,
+            target_owner=awareness.target_owner,
         )
         layer_labels = {
             "terrain": "NEUTRAL TERRAIN",
@@ -389,17 +427,30 @@ class NightjarApp(App[None]):
             f" {frame.operation_name}  •  {frame.scenario.replace('_', ' ').upper()}  "
             f"•  SEED {frame.seed}"
         )
-        telemetry: list[str] = []
+        telemetry = Text()
         for drone in frame.drones:
             marker = "▶" if drone.identifier == self.selected_drone_id else " "
             telemetry.append(
-                f" {marker} [{drone.identifier}] {drone.callsign}  {drone.mode.value}"
+                f" {marker} {drone_marker(drone.identifier, animal_icons=self.animal_icons)} "
+                f"[{drone.identifier}] {drone.callsign}  {drone.mode.value}\n",
+                style=f"bold {drone_color(drone.identifier, selected=drone.identifier == self.selected_drone_id)}",
             )
+            activity = {
+                "MANUAL": "OPERATOR CONTROL",
+                "AUTO": "RECONNAISSANCE",
+                "IDLE": "PARKED",
+            }[drone.mode.value]
+            location = room_name(frame, drone.position)
+            room_coverage = next(
+                (room for room in awareness.room_coverage if room.name == location),
+                None,
+            )
+            visits = f" / {room_coverage.fraction:.0%} visited" if room_coverage else ""
             telemetry.append(
-                f"   ({drone.position[0]:02d},{drone.position[1]:02d})  "
-                f"MOVES {drone.moves:03d}"
+                f"   {location}{visits}\n"
+                f"   ({drone.position[0]:02d},{drone.position[1]:02d}) {activity}\n"
             )
-        self.query_one("#agents", Static).update("\n".join(telemetry))
+        self.query_one("#agents", Static).update(telemetry)
         if selected.last_result is None or selected.last_direction is None:
             movement = "NOT STARTED"
         elif selected.last_result.moved:
@@ -452,16 +503,57 @@ class NightjarApp(App[None]):
         )
         decision = snapshot.last_planner_decision
         self.query_one("#metrics", Static).update(metrics)
+        budget = str(frame.max_ticks) if frame.max_ticks is not None else "OPEN"
+        phase = (
+            "ENDED / B DEBRIEF"
+            if frame.status is not MissionStatus.ACTIVE
+            else "1 OBJECTIVE / B BRIEF"
+        )
+        self.query_one("#mission_focus", Static).update(
+            Text(
+                f" {phase}  {frame.tick}/{budget} TICKS\n"
+                f" COVERAGE {progress_bar(coverage(snapshot), 12)} {coverage(snapshot):.0%}",
+                no_wrap=True,
+                overflow="crop",
+            )
+        )
+        self.query_one("#legend", Static).update(
+            Text(
+                " H RELATIVE INTENSITY / C COVER / P PATH\n"
+                " T MILESTONES / G UNIT IDS / TINT LATEST SCAN",
+                no_wrap=True,
+                overflow="crop",
+            )
+        )
+        self.query_one("#evidence", Static).update(evidence_text(snapshot))
         if self.replay_mode:
-            self.query_one("#events", Static).update("\n".join(frame.events))
+            self.query_one("#events", Static).update(
+                "\n".join(
+                    merge_room_entries(list(frame.events), awareness.room_entries[-3:])[
+                        -8:
+                    ]
+                )
+            )
         else:
-            for event in frame.events:
-                if event not in self._seen_provider_events:
-                    self._ui_events.append(event)
+            new_events = [
+                event
+                for event in frame.events
+                if event not in self._seen_provider_events
+            ]
             self._seen_provider_events = set(frame.events)
+            new_entries = tuple(
+                entry
+                for entry in awareness.room_entries
+                if entry.event_sequence not in self._seen_room_entries
+            )
+            self._seen_room_entries.update(
+                entry.event_sequence for entry in new_entries
+            )
+            self._ui_events.extend(new_events)
+            self._ui_events = merge_room_entries(self._ui_events, new_entries)
             self.query_one("#events", Static).update("\n".join(self._ui_events[-8:]))
         if decision is None:
-            planner_summary = " PLAN: READY"
+            planner_summary = " FLEET PLAN: READY"
         else:
             action_label = decision.action.type.value.upper()
             if decision.action.direction is not None:
@@ -470,13 +562,13 @@ class NightjarApp(App[None]):
                 action_label += (
                     f" → ({decision.target[0]:02d},{decision.target[1]:02d})"
                 )
-            planner_summary = f" PLAN: {action_label}"
+            planner_summary = f" FLEET PLAN: {action_label}"
             if decision.expected_information_gain_bits is not None:
                 planner_summary += (
                     f"\n IG {decision.expected_information_gain_bits:.4f} bits"
                 )
             if decision.travel_cost is not None:
-                planner_summary += f" / COST {decision.travel_cost} ticks"
+                planner_summary += f" / COST {decision.travel_cost}"
         state = "RUNNING" if self.playing else "PAUSED"
         replay_label = (
             f"REPLAY {self._replay_index + 1}/{len(self._replay_timeline.snapshots)} / READ ONLY"
@@ -490,6 +582,7 @@ class NightjarApp(App[None]):
             f" {snapshot.search_strategy.label}\n"
             f"{planner_summary}\n"
             f" STATUS: {frame.status.value}"
+            + (" / B" if frame.status is not MissionStatus.ACTIVE else "")
         )
 
     def action_toggle_play(self) -> None:
@@ -578,6 +671,8 @@ class NightjarApp(App[None]):
                 self._refresh_screen()
 
     def action_layer(self, layer: str) -> None:
+        if self._summary_open or self._comparison_open:
+            return
         if self.mode == "demo" and layer in {"belief", "coverage", "paths"}:
             self.layer = layer
             self._refresh_screen()
@@ -589,6 +684,10 @@ class NightjarApp(App[None]):
             self._refresh_screen()
 
     def action_next_agent(self) -> None:
+        if self._comparison_open:
+            if isinstance(self.screen, ComparisonScreen):
+                self.screen.action_switch_policy()
+            return
         if self.mode == "gridworld":
             self._submit_command(self._controller.next_drone, "SELECT")
             return
@@ -622,3 +721,72 @@ class NightjarApp(App[None]):
         if self.mode == "demo" and self.replay_mode:
             self.tick = max(0, min(MAX_TICK, self.tick + direction))
             self._refresh_screen()
+
+    def action_mission_summary(self) -> None:
+        self._open_mission_summary(milestones_only=False)
+
+    def action_mission_milestones(self) -> None:
+        self._open_mission_summary(milestones_only=True)
+
+    def action_toggle_drone_icons(self) -> None:
+        if not self._mission_available():
+            return
+        self.animal_icons = not self.animal_icons
+        self._refresh_screen()
+
+    def _open_mission_summary(self, *, milestones_only: bool) -> None:
+        """Pause now, then present the committed view after accepted commands finish."""
+        if not self._mission_available():
+            return
+        self.playing = False
+        self._play_requested = False
+        self._play_request_revision += 1
+
+        async def show_summary() -> None:
+            snapshot = self._controller.view_snapshot
+            history = self._controller.replay_history or self._controller.live_history
+            initial_entropy = history.snapshots[0].belief.stats.entropy_bits
+            self.push_screen(
+                MissionSummaryScreen(
+                    snapshot,
+                    initial_entropy,
+                    replay=self._controller.replay_mode,
+                    field_awareness=build_awareness(history, snapshot),
+                    milestones_only=milestones_only,
+                ),
+                self._summary_closed,
+            )
+
+        # Reserve through the same FIFO as manual/replay inputs before blocking
+        # subsequent key bindings. An already executing round is allowed to finish.
+        self._submit_command(show_summary, "MISSION SUMMARY")
+        self._summary_open = True
+        self._refresh_screen()
+
+    def _summary_closed(self, _: None) -> None:
+        self._summary_open = False
+        self.playing = False
+        self._play_requested = False
+        self._refresh_screen()
+
+    def action_comparison(self) -> None:
+        """Pause the mission and enter a fresh, isolated paired experiment."""
+        if not self._mission_available():
+            return
+        self.playing = False
+        self._play_requested = False
+        self._play_request_revision += 1
+
+        async def show_comparison() -> None:
+            self.push_screen(
+                ComparisonScreen(self.mission_config), self._comparison_closed
+            )
+
+        self._submit_command(show_comparison, "POLICY COMPARISON")
+        self._comparison_open = True
+
+    def _comparison_closed(self, _: None) -> None:
+        self._comparison_open = False
+        self.playing = False
+        self._play_requested = False
+        self._refresh_screen()
