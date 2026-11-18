@@ -1,6 +1,6 @@
 # Nightjar
 
-I’ve been enjoying playing Rainbow Six Siege lately on my PC, especially recon drones aspect of it. Nightjar is my
+I’ve been enjoying playing Rainbow Six Siege lately on my PC, especially the recon drones aspect of it. Nightjar is my
 local, terminal-based take on that idea: a fictional facility, a few virtual
 drones, and a shared map for gathering intel.
 
