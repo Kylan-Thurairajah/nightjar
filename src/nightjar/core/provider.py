@@ -22,7 +22,9 @@ from nightjar.core.sensor import (
     Observation,
     ProximitySensor,
     SensorConfig,
+    SensorPreset,
     SensorType,
+    VERIFICATION_SENSOR_CONFIG,
 )
 from nightjar.core.world import BlockReason, Direction, GridWorld, Position, StepResult
 
@@ -51,6 +53,7 @@ class MissionStatus(str, Enum):
     ACTIVE = "ACTIVE"
     BUDGET_EXHAUSTED = "BUDGET EXHAUSTED"
     PLANNER_EXHAUSTED = "PLANNER EXHAUSTED"
+    CONFIRMED = "CONFIRMED"
 
 
 @dataclass(frozen=True)
@@ -246,6 +249,11 @@ class GridWorldSimulation:
         )
         if sensor_config is not None and not isinstance(sensor_config, SensorConfig):
             raise ValueError("sensor_config must be a SensorConfig")
+        if (
+            sensor_config is not None
+            and sensor_config.preset is SensorPreset.VERIFICATION
+        ):
+            raise ValueError("verification config is reserved for exact-cell checks")
         self._sensor_config = (
             sensor_config if sensor_config is not None else SensorConfig()
         )
@@ -561,6 +569,78 @@ class GridWorldSimulation:
                 "scan", drone.identifier, observation_id=observation.observation_id
             )
             if self._max_ticks is not None and self._tick >= self._max_ticks:
+                self._status = MissionStatus.BUDGET_EXHAUSTED
+                self._events.append(
+                    f"[{self._tick:04d}]  MISSION COMPLETE / TICK BUDGET EXHAUSTED"
+                )
+                self._record("terminal", status=self._status.value)
+            return observation
+
+    def verify(self, drone_id: str) -> Observation:
+        """Verify a contacted candidate under the selected manual drone."""
+        if self._status is not MissionStatus.ACTIVE:
+            raise ValueError("cannot verify after the mission has ended")
+        drone = self._get_drone(drone_id)
+        if drone.mode is not OperationalMode.MANUAL:
+            raise ValueError(f"drone {drone.identifier} is not in MANUAL mode")
+
+        from nightjar.core.discovery import (
+            CONTACT_THRESHOLD,
+            DiscoveryPhase,
+            discovery_state,
+        )
+
+        state = discovery_state(self.snapshot())
+        candidate = state.candidate_position
+        if (
+            candidate is None
+            or state.phase not in {DiscoveryPhase.CONTACT, DiscoveryPhase.VERIFYING}
+            or self._belief_map.stats.map_probability < CONTACT_THRESHOLD
+        ):
+            raise ValueError("no beacon candidate is ready to verify")
+        if drone.world.position != candidate:
+            raise ValueError(
+                f"move {drone.callsign} to candidate {candidate[0]:02d},"
+                f"{candidate[1]:02d} before verifying"
+            )
+
+        with self._boundary():
+            positive = drone.world.position == self._objective_position
+            self._tick += 1
+            self._observation_sequences[drone.identifier] += 1
+            observation = Observation(
+                mission_id=self._mission_id,
+                observation_id=f"{self._mission_id}-OBS-{len(self._observations) + 1:06d}",
+                drone_id=drone.identifier,
+                tick=self._tick,
+                position=drone.world.position,
+                sensor_type=SensorType.VERIFICATION,
+                positive=positive,
+                sensor_config=VERIFICATION_SENSOR_CONFIG,
+                sequence_number=self._observation_sequences[drone.identifier],
+            )
+            previous_entropy = self._belief_map.stats.entropy_bits
+            belief_stats = self._belief_map.update(observation)
+            self._observations.append(observation)
+            reading = "CONFIRMED" if positive else "CANDIDATE REJECTED"
+            self._events.append(
+                f"[{self._tick:04d}]  {drone.callsign} EXACT-CELL VERIFICATION"
+            )
+            self._events.append(
+                f"[{self._tick:04d}]  {reading} / "
+                f"({drone.world.position[0]:02d},{drone.world.position[1]:02d}) "
+                f"| ΔH {belief_stats.entropy_bits - previous_entropy:+.2f} bits"
+            )
+            self._record(
+                "verify", drone.identifier, observation_id=observation.observation_id
+            )
+            if positive:
+                self._status = MissionStatus.CONFIRMED
+                self._events.append(
+                    f"[{self._tick:04d}]  MISSION COMPLETE / BEACON VERIFIED"
+                )
+                self._record("terminal", status=self._status.value)
+            elif self._max_ticks is not None and self._tick >= self._max_ticks:
                 self._status = MissionStatus.BUDGET_EXHAUSTED
                 self._events.append(
                     f"[{self._tick:04d}]  MISSION COMPLETE / TICK BUDGET EXHAUSTED"

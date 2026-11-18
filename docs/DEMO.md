@@ -4,13 +4,15 @@ I’ve been playing a lot of Rainbow Six Siege lately, and the recon drones gave
 the idea for this little search sim. The demo is a fictional intel-gathering
 mission, not a recreation of the game or its maps.
 
-R1 (RAVEN), G2 (GHOST), and V3 (VIPER) are the three virtual drones. You pilot R1
-through the Garage; G2 and V3 search other rooms and add synthetic readings to the
-shared map. The goal is to narrow down where the hidden beacon might be.
+The goal is simple: find the hidden beacon and check the likely spot. R1 (RAVEN),
+G2 (GHOST), and V3 (VIPER) are virtual drones. The colored trails show where each
+one has searched; a `?` marks a candidate and `◎` marks a verified beacon. A scan
+is a clue, not a confirmation.
 
-The captures use the real Textual UI at **132 columns × 55 rows**, so the map,
-drone telemetry, event log, and replay timeline all fit without scrolling. Maximize
-your terminal for a similar view.
+The README clip follows a real, deterministic mission through confirmation. It
+uses the Textual UI at **132 columns × 55 rows** so the map, telemetry, controls,
+event log, and replay status fit without scrolling. Press `B` afterward to see
+the debrief.
 
 ## Launch and configure
 
@@ -30,44 +32,50 @@ Use these settings in mission configuration:
 | Drones | 3 |
 | Initial control | Manual |
 | Search policy | Frontier |
-| Sensor | High reliability |
-| Tick budget | 150 |
+| Sensor | High reliability (98% / 2%) |
+| Tick budget | 1200 |
 | Seed | 6 |
 
 Review the preflight screen and launch.
 
+## Refresh the README recording
+
+On macOS, run the capture script from the repository root:
+
+```bash
+.venv/bin/python scripts/record_demo.py
+```
+
+The script drives the Textual app with real search, rescan, and verification
+actions and replaces the README GIF only after it reaches the verified debrief.
+For this compact repeatable walkthrough, the script uses the high-reliability
+98% / 2% proximity model at exact-cell range; the ordinary mission preset keeps
+its wider search radius. The mission target remains hidden from the route logic.
+
 ## Play the walkthrough
 
-1. Press `D` three times to move R1 through the Garage.
-2. Press `N` four times. Each step lets the two autonomous drones search while R1
-   remains under manual control.
-3. Press `E` to scan from R1's position. With these settings, the deterministic
-   run produces a positive synthetic reading and updates the shared evidence map.
-4. Press `R` to review the recorded mission. Use the arrow keys to seek; press `R`
-   again to return to the live mission.
+1. Press `B` to read the brief, then `Esc` to return to the mission.
+2. Press `M` to let R1 join G2 and V3 in autonomous search. Press `N` to advance
+   one fleet round at a time; the colored paths make each drone’s coverage easier
+   to follow.
+3. When the UI shows a candidate, press `3` to hand control to V3 and `H` to show
+   the belief map. Move V3 to the `?` cell with `WASD`.
+4. Press `F` to check the exact cell. A match ends the mission as **BEACON
+   VERIFIED**.
+5. Press `B` for the debrief. It reports elapsed ticks, scan readings and positive
+   intel, candidate checks, the verifying drone, and a short timeline. Press `R`
+   to review the recorded mission.
 
-The positive reading is a clue, not proof that the beacon was found. This version
-does not model target confirmation, real aircraft, or physical sensors.
+All readings and verification happen in the simulation. No real aircraft or
+physical sensors are modeled.
 
-## Captures
+## What the clip shows
 
-![Positive scan during the beacon-search mission. The full map, drone telemetry, event log, and replay timeline are visible.](demo/media/positive-scan.png)
-
-![The same mission in read-only replay.](demo/media/replay.png)
-
-The animated capture at the top of the [project README](../README.md) follows the
-same seed and interaction sequence.
-
-## 40-second video storyboard
-
-- **0–5s:** Introduce the beacon-search simulation and show the facility.
-- **5–13s:** Label R1/RAVEN as pilot-controlled; G2/GHOST and V3/VIPER search
-  autonomously.
-- **13–21s:** Move R1 through the Garage while the other two gather readings.
-- **21–29s:** Show the positive synthetic scan and the shared-map update. Make clear
-  it is a clue, not confirmation.
-- **29–36s:** Replay the run to show where the drones went.
-- **36–42s:** Close with the note that the scenario and sensors are simulated.
+- The mission-focus panel sets the goal: find the hidden beacon.
+- R1, G2, and V3 search different parts of the facility; their colors and trails
+  show who covered what.
+- A likely cell becomes a candidate, then V3 moves there and checks it.
+- The result appears on screen; `B` opens the mission debrief.
 
 ## Deeper engineering
 

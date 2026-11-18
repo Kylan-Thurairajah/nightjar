@@ -23,12 +23,14 @@ and optional engineering post remain out of scope.
 
 ## Delivered
 
-- The README now leads with the hidden-beacon mission and a real animated UI capture.
-- [The demo guide](../DEMO.md) records the exact 132 × 55 viewport, mission settings,
-  seed, ordered manual/autonomous interaction sequence, and 40-second video cut.
-- Captures in `docs/demo/media/` come from the Textual app's deterministic UI state.
-- The screen and guide state that readings are synthetic clues and discovery
-  confirmation is not modeled.
+- The README leads with the hidden-beacon mission and a real animated UI capture.
+- [The demo guide](../DEMO.md) records the 132 × 55 viewport, mission settings, seed,
+  and ordered interaction sequence for the full candidate-to-verification story.
+- The replacement capture shows a deterministic mission through confirmation.
+  Drone colors, path ownership, candidate, and verified markers are legible.
+- The screen and guide state that readings and targets are simulated. The video is
+  generated from actual Textual app states and never reads the hidden objective to
+  choose its route.
 
 The optional engineering post may be developed separately. No social account was
 used and no external content was published.

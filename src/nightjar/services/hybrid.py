@@ -167,6 +167,13 @@ class HybridMissionController:
             self._require_manual()
             await self._core(lambda: self._simulation.scan(self._selected_id))
 
+    async def verify(self) -> None:
+        async with self._command():
+            if self.replay_mode:
+                return
+            self._require_manual()
+            await self._core(lambda: self._simulation.verify(self._selected_id))
+
     async def _select(self, identifier: str) -> None:
         self.view_snapshot.frame.drone(identifier)
         if self.replay_mode:

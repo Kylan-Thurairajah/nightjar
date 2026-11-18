@@ -39,11 +39,12 @@ approvals. Preserve current core mathematics and honest presentation of uncertai
 | 013 Matched policy comparison | Implemented locally; manual review pending | Compare real FRONTIER/IG runs under same map/seed/fleet/tick ceiling; show coverage/uncertainty traces and actual stopping reasons; no assumed winner or misleading fair-outcome claim |
 | 014 Repeatable demo and engineering story | Recruiter README, deterministic UI GIF/screenshots, and short-form storyboard delivered; engineering post deferred | Human-readable mission story, reproducible walkthrough, truthful evidence and limitations; no automatic social publishing |
 | 015 Field awareness and fleet identity | Implemented locally; 338 tests passed | Animal identities, owner-colored paths, richer facility, room logs/coverage, honest milestones |
-| 016 Coordinated assignments and verified discovery | Next implementation slice | Durable reachable search/verify tasks, reallocation triggers, explicit verification, unmistakable confirmed outcome; public state and replay validation |
+| 016 Coordinated assignments and verified discovery | Partially implemented locally | Manual candidate verification, rejection feedback, and confirmed outcome are implemented; persistent search assignments and AUTO verifier routing remain |
 
 The original floor plan is inspired by tactical games without copying game maps or
 assets. No real surveillance/physical sensing is introduced. Recording tools remain
 optional external tooling; no application dependency is added for video capture.
+See the [verified-discovery implementation note](reports/016-verified-discovery.md).
 
 ## Product priority update
 

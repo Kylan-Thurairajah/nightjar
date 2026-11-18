@@ -35,9 +35,11 @@ def trace():
 
 def test_seeded_fleet_trace_serialization_and_round_trip_match_every_snapshot():
     first, second = trace(), trace()
-    assert first.history.to_json() == second.history.to_json()
-    loaded = ReplayTimeline.from_json(first.history.to_json())
-    assert loaded.to_json() == first.history.to_json()
+    serialized = first.history.to_json()
+    assert serialized == second.history.to_json()
+    assert json.loads(serialized)["version"] == 1
+    loaded = ReplayTimeline.from_json(serialized)
+    assert loaded.to_json() == serialized
     for expected, actual in zip(first.history.snapshots, loaded.snapshots):
         assert actual.frame == expected.frame
         assert actual.observations == expected.observations

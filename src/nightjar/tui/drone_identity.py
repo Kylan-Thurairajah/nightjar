@@ -1,4 +1,4 @@
-"""Compact ASCII unit designators with selection-only color emphasis.
+"""Compact ASCII unit designators and stable visual identities.
 
 Two plain characters fit each map cell without pictogram overhang or emoji fonts.
 Numeric IDs remain available; no simulation or archive state depends on display.
@@ -13,6 +13,11 @@ DRONE_ICONS = {
     "03": "V3",
 }
 DRONE_COLOR = "#a7d4b4"
+DRONE_COLORS = {
+    "01": "#75d9c4",
+    "02": "#8eafff",
+    "03": "#dfa1c7",
+}
 SELECTED_DRONE_COLOR = "#e0b45c"
 DRONE_LETTERS = {"01": "R", "02": "G", "03": "V"}
 
@@ -26,8 +31,10 @@ def drone_marker(identifier: str, animal_icons: bool = True) -> str:
 
 
 def drone_color(identifier: str, *, selected: bool = False) -> str:
-    """All identities share one neutral color; only selection receives amber."""
-    return SELECTED_DRONE_COLOR if selected else DRONE_COLOR
+    """Keep unit colors distinct unless selection needs the shared amber highlight."""
+    if selected:
+        return SELECTED_DRONE_COLOR
+    return DRONE_COLORS.get(identifier, DRONE_COLOR)
 
 
 def drone_letter(identifier: str) -> str:

@@ -7,10 +7,11 @@ from textual.widgets import Static
 
 from nightjar.core.belief import BeliefSnapshot
 from nightjar.core.demo import SimulationFrame
-from nightjar.core.provider import GridWorldFrame
 from nightjar.core.planning import PlannerActionType, PlannerDecision
+from nightjar.core.provider import GridWorldFrame
 from nightjar.core.scenarios import facility_layout
-from nightjar.core.sensor import Observation
+from nightjar.core.sensor import Observation, SensorType
+from nightjar.core.world import Position
 from nightjar.tui.drone_identity import drone_color, drone_letter, drone_marker
 
 # Near-black, desaturated green, yellow, amber; intended for true-color terminals.
@@ -85,6 +86,8 @@ class MapWidget(Static):
         animal_icons: bool = False,
         styled_drones: bool = False,
         target_owner: str | None = None,
+        candidate_position: Position | None = None,
+        confirmed_position: Position | None = None,
     ) -> None:
         output = Text(no_wrap=True, overflow="crop")
         occupied = {drone.position: drone for drone in frame.drones}
@@ -119,29 +122,38 @@ class MapWidget(Static):
             and planner_decision.action.type is PlannerActionType.MOVE
             else None
         )
-        scan_background = (
-            "on #49391e"
-            if last_observation is not None and last_observation.positive
-            else "on #142e25"
-        )
+        if last_observation is not None and last_observation.positive:
+            scan_background = (
+                "on #245538"
+                if last_observation.sensor_type is SensorType.VERIFICATION
+                else "on #49391e"
+            )
+        else:
+            scan_background = "on #142e25"
         for y in range(frame.height):
             for x in range(frame.width):
                 point = (x, y)
                 drone = occupied.get(point)
                 if drone is not None:
-                    style = (
-                        "bold #080f0c on #e0b45c"
-                        if drone.identifier == selected_drone_id
-                        else f"bold {drone_color(drone.identifier)} on #14251c"
-                    )
-                    output.append(
-                        drone_marker(drone.identifier, animal_icons), style=style
-                    )
+                    marker = drone_marker(drone.identifier, animal_icons)
+                    if point == confirmed_position:
+                        marker = f"{marker[0]}!"
+                    if drone.identifier == selected_drone_id:
+                        style = "bold #080f0c on #e0b45c"
+                    elif point == confirmed_position:
+                        style = f"bold {drone_color(drone.identifier)} on #3c6746"
+                    else:
+                        style = f"bold {drone_color(drone.identifier)} on #14251c"
+                    output.append(marker, style=style)
                 elif point in frame.obstacles:
                     if features.get(point) == "equipment":
                         output.append("\u25a5\u25a5", style="#71866d")
                     else:
                         output.append("▓▓", style="#6d8574")
+                elif point == confirmed_position:
+                    output.append("◎ ", style="bold #a8e8ad on #1e3c2b")
+                elif point == candidate_position:
+                    output.append("? ", style="bold #e0b45c on #332a1b")
                 elif point == target and not (
                     layer == "belief" and point == map_position
                 ):

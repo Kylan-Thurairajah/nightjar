@@ -97,7 +97,7 @@ def test_facility_selector_and_mission_brief_preserve_configuration_flow(size):
             brief = app.screen.query_one("#mission_brief", Static).render().plain
             assert "one hidden synthetic objective" in brief
             assert "500 action ticks" in brief
-            assert "high belief is not confirmation" in brief
+            assert "high belief is a candidate, not confirmation" in brief
             assert "Space runs available AUTO drones" in brief
             summary = app.screen.query_one("#mission_summary", Static).render().plain
             assert "TRAINING FACILITY" in summary

@@ -39,6 +39,12 @@ def test_gridworld_renders_position_obstacles_and_neutral_cells():
             assert (
                 "NEUTRAL TERRAIN" in app.query_one("#map_title", Static).render().plain
             )
+            legend = app.query_one("#legend", Static).render().plain
+            assert "R1/RAVEN" in legend
+            assert "G2/GHOST" in legend
+            assert "V3/VIPER" in legend
+            assert "? CANDIDATE" in legend
+            assert "◎ VERIFIED" in legend
 
     asyncio.run(check_rendered_grid())
 
@@ -574,9 +580,7 @@ def test_h_displays_shared_belief_heatmap_and_scan_updates_map_and_statistics():
             assert (
                 "BELIEF HEATMAP" in app.query_one("#map_title", Static).render().plain
             )
-            assert (
-                "RELATIVE INTENSITY" in app.query_one("#legend", Static).render().plain
-            )
+            assert "H BELIEF" in app.query_one("#legend", Static).render().plain
             initial_map = app.query_one("#map", MapWidget).render().plain
             assert drone_marker("01") in initial_map and "▓▓" in initial_map
             assert "░░" in initial_map

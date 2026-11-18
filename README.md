@@ -9,10 +9,12 @@ G2 (GHOST) and V3 (VIPER) search other rooms on their own. Their movement and
 synthetic scan readings build a picture of the facility and narrow down where the
 hidden beacon might be.
 
-![A Nightjar demo: R1 is piloted through the Garage while G2 and V3 search other rooms. A positive synthetic scan updates the shared map, then the mission is replayed.](docs/demo/media/beacon-search.gif)
+![Nightjar’s virtual drones gather intel, flag a candidate, verify the beacon, and show the mission debrief.](docs/demo/media/beacon-search.gif)
 
 It’s a small experiment in surveillance-style recon and intel gathering, not a
-real-world surveillance tool. The facility, beacon, and sensors are simulated. 
+real-world surveillance tool. The facility, beacon, and sensors are simulated.
+A positive scan is only a lead: pilot to the likely cell and press `F` to check it.
+A match confirms the beacon; a miss rules out that candidate.
 
 ## Try the mission
 
@@ -41,8 +43,8 @@ In the setup screen, choose **Training Facility**, **Standard**, **3 drones**,
 **Manual**, **Frontier**, **High reliability**, and **seed 6**. Use a full-size
 terminal for the complete map and mission panels.
 
-`WASD` moves your drone · `E` scans · `N` advances the fleet · `Space` runs or
-pauses it · `R` replays the mission · `B` opens the brief.
+`WASD` moves your drone · `E` scans · `F` verifies a candidate · `N` advances the
+fleet · `Space` runs or pauses it · `R` replays the mission · `B` opens the brief.
 
 For the exact walkthrough and screenshots, see the [demo guide](docs/DEMO.md).
 
@@ -50,6 +52,7 @@ For the exact walkthrough and screenshots, see the [demo guide](docs/DEMO.md).
 
 - One drone stays under your control while the other two search independently.
 - Scans update the team’s shared picture of where the beacon might be.
+- A likely spot is just a lead; a separate check confirms the beacon or rules it out.
 - Replay shows where the drones went and which readings they collected.
 
 ## More if you’re curious

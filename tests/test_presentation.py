@@ -7,9 +7,11 @@ from textual.widgets import Static
 
 from nightjar.core.mission import MissionConfig
 from nightjar.core.planning import SearchStrategy
-from nightjar.core.provider import GridWorldSimulation
+from nightjar.core.provider import GridWorldSimulation, MissionStatus
+from nightjar.core.sensor import SensorConfig
 from nightjar.core.world import GridWorld
 from nightjar.tui.app import NightjarApp
+from nightjar.tui.map_widget import MapWidget
 from nightjar.tui.presentation import MissionSummaryScreen, coverage, summary_text
 
 
@@ -42,14 +44,14 @@ def test_brief_pauses_after_accepted_scan_and_blocks_mission_keys(size):
             assert app.screen.snapshot.observations == simulation.observations
             assert not app.playing
             saved = simulation.history.to_json()
-            await pilot.press("space", "d", "e", "tab", "r", "n")
+            await pilot.press("space", "d", "e", "f", "tab", "r", "n")
             await app.wait_for_commands()
             assert simulation.history.to_json() == saved
             assert app.selected_drone_id == "01"
             assert not app.replay_mode
             body = app.screen.query_one("#summary_body", Static).render().plain
             assert "SCANS       1" in body
-            assert "CONFIRMATION NOT MODELED" in body
+            assert "SEARCHING / no candidate above 60% yet." in body
             assert app.screen.query_one("#summary_close").region.bottom <= size[1]
             await pilot.press("q")
             await pilot.pause()
@@ -122,7 +124,7 @@ def test_summary_coverage_and_entropy_come_from_public_state():
     assert coverage(snapshot) == 2 / 11
     text = summary_text(snapshot, initial.belief.stats.entropy_bits).plain
     assert "find the hidden beacon" in text
-    assert "CONFIRMATION NOT MODELED" in text
+    assert "SEARCHING / no candidate above 60% yet." in text
     assert "(2/11 cells)" in text
     assert "SCANS       1" in text
     assert f"{snapshot.belief.stats.entropy_bits:.3f} bits" in text
@@ -130,6 +132,61 @@ def test_summary_coverage_and_entropy_come_from_public_state():
         f"{snapshot.belief.stats.entropy_bits - initial.belief.stats.entropy_bits:+.3f}"
         in text
     )
+
+
+def test_manual_verification_confirms_beacon_in_ui_map_and_debrief():
+    simulation = GridWorldSimulation(
+        GridWorld(width=3, height=3, seed=7, obstacles=()),
+        drone_count=1,
+        max_ticks=10,
+        sensor_config=SensorConfig(
+            detection_radius=0,
+            sensitivity=1.0,
+            false_positive_probability=0.01,
+        ),
+    )
+    target = simulation.debug_objective_position()
+    app = NightjarApp(mode="gridworld", gridworld_simulation=simulation)
+
+    async def exercise():
+        async with app.run_test(size=(110, 42)) as pilot:
+            app._mission_timer.pause()
+            await app.wait_for_commands()
+            target_x, target_y = target
+            for direction, count in (
+                ("east", target_x),
+                ("south", target_y),
+            ):
+                for _ in range(count):
+                    app.action_move(direction)
+                    await app.wait_for_commands()
+            app.action_scan()
+            await app.wait_for_commands()
+            assert (
+                "VERIFY CANDIDATE / F"
+                in app.query_one("#mission_focus", Static).render().plain
+            )
+
+            await pilot.press("f")
+            await app.wait_for_commands()
+
+            assert simulation.frame().status is MissionStatus.CONFIRMED
+            assert (
+                "BEACON VERIFIED"
+                in app.query_one("#mission_focus", Static).render().plain
+            )
+            assert (
+                "BEACON VERIFIED" in app.query_one("#evidence", Static).render().plain
+            )
+            assert "R!" in app.query_one("#map", MapWidget).render().plain
+            app.action_mission_summary()
+            await app.wait_for_commands()
+            await pilot.pause()
+            body = app.screen.query_one("#summary_body", Static).render().plain
+            assert "BEACON VERIFIED / RAVEN" in body
+            assert "CONFIRMATION NOT MODELED" not in body
+
+    asyncio.run(exercise())
 
 
 def test_compact_presentation_keeps_bar_legend_map_rows_and_terminal_status_visible():
@@ -152,8 +209,8 @@ def test_compact_presentation_keeps_bar_legend_map_rows_and_terminal_status_visi
             legend_lines = [
                 strip.text for strip in legend.render_lines(legend.size.region)
             ]
-            assert "RELATIVE INTENSITY" in legend_lines[0]
-            assert "TINT LATEST SCAN" in legend_lines[1]
+            assert "H BELIEF" in legend_lines[0]
+            assert "F VERIFY" in legend_lines[0]
             assert app.query_one("#map").content_size.height >= 5
             app.action_step()
             await app.wait_for_commands()

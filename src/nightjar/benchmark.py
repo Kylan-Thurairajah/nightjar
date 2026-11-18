@@ -67,6 +67,8 @@ class BenchmarkConfig:
         ):
             if not isinstance(value, kind):
                 raise ValueError(f"unsupported {kind.__name__}")
+        if self.sensor_preset is SensorPreset.VERIFICATION:
+            raise ValueError("verification is reserved for candidate checks")
 
 
 @dataclass(frozen=True)
@@ -273,7 +275,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         default="open_field",
     )
     parser.add_argument(
-        "--sensor", choices=[value.value for value in SensorPreset], default="standard"
+        "--sensor",
+        choices=[
+            value.value
+            for value in SensorPreset
+            if value is not SensorPreset.VERIFICATION
+        ],
+        default="standard",
     )
     parser.add_argument(
         "--output",

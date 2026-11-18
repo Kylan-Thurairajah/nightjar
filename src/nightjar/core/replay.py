@@ -27,7 +27,13 @@ from nightjar.core.provider import (
     MissionStatus,
     OperationalMode,
 )
-from nightjar.core.sensor import Observation, SensorConfig, SensorPreset, SensorType
+from nightjar.core.sensor import (
+    Observation,
+    SensorConfig,
+    SensorPreset,
+    SensorType,
+    VERIFICATION_SENSOR_CONFIG,
+)
 from nightjar.core.world import BlockReason, Direction, Position, StepResult
 
 
@@ -80,9 +86,10 @@ class ReplayTimeline:
         return self.snapshots[max(0, min(len(self.snapshots) - 1, index))]
 
     def to_json(self) -> str:
+        version = 2 if any(event.kind == "verify" for event in self.events) else 1
         return json.dumps(
             {
-                "version": 1,
+                "version": version,
                 "snapshots": _encode(self.snapshots),
                 "events": _encode(self.events),
             },
@@ -97,12 +104,13 @@ class ReplayTimeline:
         try:
             data = json.loads(value, object_pairs_hook=_unique_object)
             data = _object(data, {"version", "snapshots", "events"})
-            if type(data["version"]) is not int or data["version"] != 1:
+            if type(data["version"]) is not int or data["version"] not in {1, 2}:
                 raise ValueError("unsupported replay version")
+            version = data["version"]
             snapshots = tuple(_snapshot(item) for item in _list(data["snapshots"]))
             events = tuple(_event(item) for item in _list(data["events"]))
             timeline = cls(snapshots, events)
-            _validate(timeline)
+            _validate(timeline, version=version)
             return timeline
         except (KeyError, TypeError, OverflowError, IndexError, AttributeError) as exc:
             raise ValueError("malformed replay archive") from exc
@@ -318,7 +326,15 @@ def _snapshot(value: Any) -> MissionSnapshot:
 def _event(value: Any) -> MissionEvent:
     data = _object(value, {field.name for field in fields(MissionEvent)})
     kind = _text(data["kind"])
-    if kind not in {"move", "blocked", "scan", "mode", "stop", "terminal"}:
+    if kind not in {
+        "move",
+        "blocked",
+        "scan",
+        "verify",
+        "mode",
+        "stop",
+        "terminal",
+    }:
         raise ValueError("unsupported replay event kind")
     pairs: list[tuple[str, str]] = []
     for pair in _list(data["details"]):
@@ -339,9 +355,12 @@ def _event(value: Any) -> MissionEvent:
     )
 
 
-def _validate(timeline: ReplayTimeline) -> None:
+def _validate(timeline: ReplayTimeline, *, version: int) -> None:
     if not timeline.snapshots:
         raise ValueError("replay requires an initial snapshot")
+    has_verification = any(event.kind == "verify" for event in timeline.events)
+    if (version == 2) != has_verification:
+        raise ValueError("replay version does not match verification events")
     initial = timeline.snapshots[0]
     if (
         initial.index != 0
@@ -354,6 +373,7 @@ def _validate(timeline: ReplayTimeline) -> None:
     if (
         geometry.status is not MissionStatus.ACTIVE
         or initial.last_planner_decision is not None
+        or initial.sensor_config.preset is SensorPreset.VERIFICATION
     ):
         raise ValueError("invalid initial replay mission state")
     if any(
@@ -499,7 +519,13 @@ def _validate(timeline: ReplayTimeline) -> None:
                 or observation.mission_id != frame.mission_id
                 or observation.drone_id not in {d.identifier for d in frame.drones}
                 or not _valid_position(frame, observation.position)
-                or observation.sensor_config != snapshot.sensor_config
+                or observation.sensor_type is SensorType.PROXIMITY
+                and observation.sensor_config != snapshot.sensor_config
+                or observation.sensor_type is SensorType.VERIFICATION
+                and (
+                    version != 2
+                    or observation.sensor_config != VERIFICATION_SENSOR_CONFIG
+                )
             ):
                 raise ValueError("invalid replay observation identity/order")
             sequences[observation.drone_id] = sequences.get(observation.drone_id, 0) + 1
@@ -508,6 +534,23 @@ def _validate(timeline: ReplayTimeline) -> None:
             observation_ids.add(observation.observation_id)
             observation_tick = observation.tick
             belief.update(observation)
+        successful_verifications = tuple(
+            observation
+            for observation in snapshot.observations
+            if observation.sensor_type is SensorType.VERIFICATION
+            and observation.positive
+        )
+        if (
+            frame.status is MissionStatus.CONFIRMED
+            and (
+                len(successful_verifications) != 1
+                or successful_verifications[0] != snapshot.observations[-1]
+                or successful_verifications[0].tick != frame.tick
+            )
+            or frame.status is not MissionStatus.CONFIRMED
+            and successful_verifications
+        ):
+            raise ValueError("replay confirmation does not match verification evidence")
         probabilities = snapshot.belief.probabilities
         if (
             probabilities.shape != (frame.height, frame.width)
@@ -588,7 +631,7 @@ def _validate_boundary(
         if status is not MissionStatus.ACTIVE:
             raise ValueError("replay actions after terminal event")
         details = dict(event.details)
-        if event.kind in {"move", "blocked", "scan"}:
+        if event.kind in {"move", "blocked", "scan", "verify"}:
             tick += 1
         if event.tick != tick:
             raise ValueError("invalid replay event tick")
@@ -604,12 +647,21 @@ def _validate_boundary(
                     tick != snapshot.frame.max_ticks
                     or sequence == offset + 1
                     or events[sequence - offset - 2].kind
-                    not in {"move", "blocked", "scan"}
+                    not in {"move", "blocked", "scan", "verify"}
                 )
                 or status is MissionStatus.PLANNER_EXHAUSTED
                 and (
                     sequence == offset + 1
                     or events[sequence - offset - 2].kind != "stop"
+                )
+                or status is MissionStatus.CONFIRMED
+                and (
+                    sequence == offset + 1
+                    or events[sequence - offset - 2].kind != "verify"
+                    or not snapshot.observations
+                    or snapshot.observations[-1].sensor_type
+                    is not SensorType.VERIFICATION
+                    or not snapshot.observations[-1].positive
                 )
             ):
                 raise ValueError("replay terminal event lacks its cause")
@@ -699,6 +751,29 @@ def _validate_boundary(
                 or observation.position != drone.position
             ):
                 raise ValueError("replay scan does not match observation")
+            observation_index += 1
+        elif event.kind == "verify":
+            from nightjar.core.discovery import CONTACT_THRESHOLD
+
+            if (
+                set(details) != {"observation_id"}
+                or observation_index >= len(snapshot.observations)
+                or drone.mode is not OperationalMode.MANUAL
+                or not previous.observations
+                or previous.belief.stats.map_probability < CONTACT_THRESHOLD
+                or previous.belief.stats.map_position != drone.position
+            ):
+                raise ValueError("invalid replay verification action")
+            observation = snapshot.observations[observation_index]
+            if (
+                observation.observation_id != details["observation_id"]
+                or observation.drone_id != drone.identifier
+                or observation.tick != tick
+                or observation.position != drone.position
+                or observation.sensor_type is not SensorType.VERIFICATION
+                or observation.sensor_config != VERIFICATION_SENSOR_CONFIG
+            ):
+                raise ValueError("replay verification does not match observation")
             observation_index += 1
         elif event.kind == "stop":
             if details or drone.mode is not OperationalMode.AUTO:

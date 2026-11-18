@@ -16,12 +16,13 @@ seed 0 and a 100-tick budget for an easy-to-observe run. Review preflight and la
 | Launch | Paused; 01 MANUAL, 02/03 AUTO. |
 | Space | 02/03 act while 01 waits for you. |
 | WASD, then E while running | Selected MANUAL drone moves/scans; background AUTO continues. A blocked movement consumes a tick. |
+| Candidate, then F | Move the selected MANUAL drone to the candidate cell; F performs one exact-cell verification. A match ends the mission as CONFIRMED; a miss removes that candidate and continues the search. |
 | Tab | Next active drone becomes MANUAL; previous controlled drone becomes AUTO. |
-| I, then try WASD/E | Selected drone stays parked; input is denied without pausing other AUTO drones. |
+| I, then try WASD/E/F | Selected drone stays parked; input is denied without pausing other AUTO drones. |
 | M on parked selected drone | Selected returns to MANUAL; other parked drones remain parked. |
 | Space to pause, then N | One roster-order AUTO round; no implicit MANUAL movement. With two eligible AUTO drones this usually consumes two ticks. |
 | H / C / P | Belief / coverage / paths display without changing mission state. |
-| R, Left/Right, Tab | Historical viewing; selection is view-only. WASD/E/M/I/N do not mutate live state. |
+| R, Left/Right, Tab | Historical viewing; selection is view-only. WASD/E/F/M/I/N do not mutate live state. |
 | R again | Original live selection restored, fleet paused. Space resumes AUTO. |
 | Tick limit | Global ticks do not exceed budget; mission stops. Planner exhaustion may stop the whole mission earlier. |
 
@@ -97,7 +98,9 @@ Press B while running: summary opens after accepted work, shows actual coverage/
 scans/uncertainty and pauses further rounds. Esc/Enter/Q closes to the same paused
 mission. Resume, then use R/arrows/B to inspect a historical summary; no future
 readings/ticks should appear. Exit to the same replay position, then R returns live.
-At mission end B should show the actual stopping reason without a discovery claim.
+At mission end B should show the actual stopping reason and only report a discovery
+after a successful exact-cell verification. Check B at80x24: body can scroll and
+close button/shortcuts remain usable.
 Check B at80x24: body can scroll and close button/shortcuts remain usable.
 
 No owner manual acceptance for012 has been recorded yet.
@@ -136,8 +139,18 @@ field summary. Opening either pauses AUTO; Esc/Enter/Q returns to the same view.
 
 Seek an earlier view with R/arrows then T: later entries/readings/stopping milestones
 must not appear. Check T at80x24, including its scrollable body and close button.
-A positive signal stays explicitly unconfirmed. Actual beacon confirmation and
-persistent per-drone tasks are planned next, not implemented by this visual slice.
+
+## Verified discovery follow-up (016, manual slice)
+
+Continue a mission until the shared map shows a candidate at 60% or higher. The
+focus line should say CONTACT / MOVE TO CANDIDATE. Pilot the selected MANUAL drone
+to that cell: the line should offer VERIFY CANDIDATE / F. Press F. A true exact-cell
+check ends the mission, shows BEACON VERIFIED in the event/evidence area and leaves
+an `!` on the map. A false contact is rejected, the cell leaves the posterior and
+search continues. R/arrows/B must reproduce only the selected historical outcome.
+
+The check is synthetic and has no RNG draw. At present, verification is MANUAL; AUTO
+candidate routing and persistent assignment plans remain unimplemented.
 
 Selection-only unit marker check: withthree drones, Tab/1/2/3 must move the amber
 highlight to exactlyone selected drone; VIPER must stayneutral whenunselected.

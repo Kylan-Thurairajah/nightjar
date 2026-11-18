@@ -12,9 +12,11 @@ from textual.events import Resize
 from textual.widgets import Footer, Static
 
 from nightjar.core.demo import DemoSimulation, MAX_TICK
+from nightjar.core.discovery import DiscoveryPhase, discovery_state
 from nightjar.core.mission import MissionConfig, create_simulation
 from nightjar.core.provider import GridWorldSimulation, MissionStatus
 from nightjar.core.replay import HistoryCapacityError, MissionSnapshot, ReplayTimeline
+from nightjar.core.sensor import SensorType
 from nightjar.core.world import Direction
 from nightjar.services.hybrid import ControlDeniedError, HybridMissionController
 from nightjar.tui.map_widget import MapWidget
@@ -31,6 +33,19 @@ from nightjar.tui.presentation import (
 )
 
 
+def _mission_legend() -> Text:
+    legend = Text(" H BELIEF / C COVER / P PATH / F VERIFY\n")
+    for identifier, label in (
+        ("01", "R1/RAVEN"),
+        ("02", "G2/GHOST"),
+        ("03", "V3/VIPER"),
+    ):
+        legend.append(label, style=drone_color(identifier))
+        legend.append("  ")
+    legend.append("? CANDIDATE / ◎ VERIFIED")
+    return legend
+
+
 class NightjarApp(App[None]):
     TITLE = "NIGHTJAR"
     SUB_TITLE = "MISSION CONFIGURATION / SIM LAB"
@@ -44,6 +59,7 @@ class NightjarApp(App[None]):
         Binding("s", "move('south')", "Move South"),
         Binding("d", "move('east')", "Move East"),
         Binding("e", "scan", "Sensor Scan"),
+        Binding("f", "verify", "Verify Candidate"),
         Binding("h", "layer('belief')", "Heatmap"),
         Binding("c", "layer('coverage')", "Coverage"),
         Binding("p", "layer('paths')", "Paths"),
@@ -126,12 +142,14 @@ class NightjarApp(App[None]):
                 if self.mode == "gridworld":
                     yield Static(id="mission_focus")
                 yield MapWidget(id="map")
-                legend = (
-                    " ▓▓ WALL  01-10 DRONES  WASD MOVE  [E] SCAN  "
-                    "[H] BELIEF / RELATIVE INTENSITY  [C] COVER  [P] PATH"
-                    if self.mode == "gridworld"
-                    else " LOW  ░░  ▒▒  ██   ▓▓ WALL     01 DRONE     [H] HEAT  [C] COVER  [P] PATH"
-                )
+                legend: Text | str
+                if self.mode == "gridworld":
+                    legend = _mission_legend()
+                else:
+                    legend = (
+                        " LOW  ░░  ▒▒  ██   ▓▓ WALL     01 DRONE     "
+                        "[H] HEAT  [C] COVER  [P] PATH"
+                    )
                 yield Static(legend, id="legend")
             with Vertical(id="telemetry_panel"):
                 yield Static("┌ AGENT TELEMETRY", classes="section_title")
@@ -151,7 +169,7 @@ class NightjarApp(App[None]):
                 yield Static("┌ MISSION REPLAY", classes="section_title")
                 yield Static(id="timeline")
         mode_note = (
-            " GRIDWORLD  •  WASD/E manual  M manual/auto  N step  Space run  "
+            " GRIDWORLD  •  WASD/E/F manual  M manual/auto  N step  Space run  "
             "H belief  Tab/1-3 select"
             if self.mode == "gridworld"
             else " TERMINAL-FIRST PROTOTYPE  •  Synthetic belief field, scripted agent routes  •  No external sensors"
@@ -387,6 +405,7 @@ class NightjarApp(App[None]):
         frame = snapshot.frame
         history = self._controller.replay_history or self._controller.live_history
         awareness = build_awareness(history, snapshot)
+        discovery = discovery_state(snapshot)
         self.tick = frame.tick
         selected = frame.drone(self.selected_drone_id)
         observations = snapshot.observations
@@ -409,6 +428,12 @@ class NightjarApp(App[None]):
             animal_icons=self.animal_icons,
             styled_drones=True,
             target_owner=awareness.target_owner,
+            candidate_position=(
+                discovery.candidate_position
+                if discovery.phase is not DiscoveryPhase.CONFIRMED
+                else None
+            ),
+            confirmed_position=discovery.confirmed_position,
         )
         layer_labels = {
             "terrain": "NEUTRAL TERRAIN",
@@ -465,19 +490,25 @@ class NightjarApp(App[None]):
             if reason.value == "drone":
                 reason_label = "DRONE COLLISION"
             movement = f"BLOCKED BY {reason_label}"
-        sensor_status = (
-            "READY"
-            if selected_observation is None
-            else f"LAST {selected_observation.sequence_number:03d} "
-            f"{'POSITIVE' if selected_observation.positive else 'NEGATIVE'}"
-        )
-        last_reading = (
-            "NONE"
-            if last_observation is None
-            else (
+        if selected_observation is None:
+            sensor_status = "READY"
+        elif selected_observation.sensor_type is SensorType.VERIFICATION:
+            sensor_status = (
+                "VERIFIED" if selected_observation.positive else "CANDIDATE REJECTED"
+            )
+        else:
+            sensor_status = (
+                f"LAST {selected_observation.sequence_number:03d} "
+                f"{'POSITIVE' if selected_observation.positive else 'NEGATIVE'}"
+            )
+        if last_observation is None:
+            last_reading = "NONE"
+        elif last_observation.sensor_type is SensorType.VERIFICATION:
+            last_reading = "VERIFIED" if last_observation.positive else "REJECTED"
+        else:
+            last_reading = (
                 "[amber]POSITIVE[/amber]" if last_observation.positive else "NEGATIVE"
             )
-        )
         sensor_preset = snapshot.sensor_config.preset.value.replace("_", " ").upper()
         belief = snapshot.belief.stats
         map_x, map_y = belief.map_position
@@ -505,8 +536,14 @@ class NightjarApp(App[None]):
         self.query_one("#metrics", Static).update(metrics)
         budget = str(frame.max_ticks) if frame.max_ticks is not None else "OPEN"
         phase = (
-            "ENDED / B DEBRIEF"
+            "BEACON VERIFIED / B DEBRIEF"
+            if frame.status is MissionStatus.CONFIRMED
+            else "ENDED / B DEBRIEF"
             if frame.status is not MissionStatus.ACTIVE
+            else "VERIFY CANDIDATE / F"
+            if discovery.phase is DiscoveryPhase.VERIFYING
+            else "CONTACT / MOVE TO CANDIDATE"
+            if discovery.phase is DiscoveryPhase.CONTACT
             else "FIND HIDDEN BEACON / B BRIEF"
         )
         self.query_one("#mission_focus", Static).update(
@@ -517,14 +554,7 @@ class NightjarApp(App[None]):
                 overflow="crop",
             )
         )
-        self.query_one("#legend", Static).update(
-            Text(
-                " H RELATIVE INTENSITY / C COVER / P PATH\n"
-                " T MILESTONES / G UNIT IDS / TINT LATEST SCAN",
-                no_wrap=True,
-                overflow="crop",
-            )
-        )
+        self.query_one("#legend", Static).update(_mission_legend())
         self.query_one("#evidence", Static).update(evidence_text(snapshot))
         if self.replay_mode:
             self.query_one("#events", Static).update(
@@ -651,6 +681,11 @@ class NightjarApp(App[None]):
         if not self._mission_available():
             return
         self._submit_command(self._controller.scan, "SCAN")
+
+    def action_verify(self) -> None:
+        if not self._mission_available():
+            return
+        self._submit_command(self._controller.verify, "VERIFY")
 
     def action_select_drone(self, drone_id: str) -> None:
         if self.mode == "gridworld":

@@ -9,7 +9,7 @@ from typing import Iterable
 import numpy as np
 from numpy.typing import NDArray
 
-from nightjar.core.sensor import Observation, SensorType
+from nightjar.core.sensor import Observation, SensorPreset, SensorType
 from nightjar.core.world import Position
 
 
@@ -146,11 +146,31 @@ class BeliefMap:
         if not observation.observation_id:
             raise ValueError("observation_id must not be empty")
         if observation.observation_id in self._applied_observation_ids:
-            raise ValueError(f"observation already applied: {observation.observation_id}")
-        if type(observation.tick) is not int or observation.tick <= self._last_observation_tick:
-            raise ValueError("observations must be applied in strictly increasing tick order")
-        if observation.sensor_type is not SensorType.PROXIMITY:
+            raise ValueError(
+                f"observation already applied: {observation.observation_id}"
+            )
+        if (
+            type(observation.tick) is not int
+            or observation.tick <= self._last_observation_tick
+        ):
+            raise ValueError(
+                "observations must be applied in strictly increasing tick order"
+            )
+        if observation.sensor_type not in {
+            SensorType.PROXIMITY,
+            SensorType.VERIFICATION,
+        }:
             raise ValueError(f"unsupported sensor type: {observation.sensor_type!r}")
+        if (
+            observation.sensor_type is SensorType.VERIFICATION
+            and observation.sensor_config.preset is not SensorPreset.VERIFICATION
+        ):
+            raise ValueError("verification observations require the exact-cell model")
+        if (
+            observation.sensor_type is SensorType.PROXIMITY
+            and observation.sensor_config.preset is SensorPreset.VERIFICATION
+        ):
+            raise ValueError("proximity observations cannot use verification config")
         if (
             not isinstance(observation.position, tuple)
             or len(observation.position) != 2
@@ -164,13 +184,9 @@ class BeliefMap:
         config = observation.sensor_config
         likelihoods = np.empty(len(self._candidate_positions), dtype=np.float64)
         for index, (x, y) in enumerate(self._candidate_positions):
-            in_range = (
-                abs(x - px) + abs(y - py) <= config.detection_radius
-            )
+            in_range = abs(x - px) + abs(y - py) <= config.detection_radius
             positive_likelihood = (
-                config.sensitivity
-                if in_range
-                else config.false_positive_probability
+                config.sensitivity if in_range else config.false_positive_probability
             )
             likelihoods[index] = (
                 positive_likelihood

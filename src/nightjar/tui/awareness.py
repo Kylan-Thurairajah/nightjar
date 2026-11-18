@@ -146,6 +146,14 @@ def build_awareness(
                 first_positive = True
             if modes[identifier] is OperationalMode.AUTO:
                 last_auto = event
+        elif event.kind == "verify" and identifier is not None:
+            observation = observations[details["observation_id"]]
+            milestone = (
+                "BEACON VERIFIED" if observation.positive else "CANDIDATE REJECTED"
+            )
+            milestones.append(
+                Milestone(event.tick, milestone, event.sequence, identifier)
+            )
         elif event.kind == "blocked" and identifier is not None:
             if details["control"] == "AUTO":
                 last_auto = event

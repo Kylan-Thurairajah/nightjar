@@ -14,6 +14,7 @@ class SensorPreset(str, Enum):
     HIGH_RELIABILITY = "high_reliability"
     STANDARD = "standard"
     DEGRADED = "degraded"
+    VERIFICATION = "verification"
 
     @property
     def probabilities(self) -> tuple[float, float]:
@@ -21,11 +22,13 @@ class SensorPreset(str, Enum):
             SensorPreset.HIGH_RELIABILITY: (0.98, 0.02),
             SensorPreset.STANDARD: (0.90, 0.05),
             SensorPreset.DEGRADED: (0.75, 0.15),
+            SensorPreset.VERIFICATION: (1.0, 0.0),
         }[self]
 
 
 class SensorType(str, Enum):
     PROXIMITY = "PROXIMITY"
+    VERIFICATION = "VERIFICATION"
 
 
 @dataclass(frozen=True)
@@ -50,6 +53,12 @@ class SensorConfig:
                 raise ValueError(f"{name} must be a finite probability from 0 to 1")
         if not isinstance(self.preset, SensorPreset):
             raise ValueError("preset must be a supported SensorPreset")
+        if self.preset is SensorPreset.VERIFICATION and (
+            self.detection_radius != 0
+            or self.sensitivity != 1.0
+            or self.false_positive_probability != 0.0
+        ):
+            raise ValueError("verification sensor configuration must be exact-cell")
 
     @classmethod
     def from_preset(cls, preset: SensorPreset) -> SensorConfig:
@@ -57,6 +66,7 @@ class SensorConfig:
             raise ValueError("preset must be a supported SensorPreset")
         sensitivity, false_positive_probability = preset.probabilities
         return cls(
+            detection_radius=0 if preset is SensorPreset.VERIFICATION else 3,
             sensitivity=sensitivity,
             false_positive_probability=false_positive_probability,
             preset=preset,
@@ -97,3 +107,6 @@ class ProximitySensor:
             else self.config.false_positive_probability
         )
         return self._random.random() < probability
+
+
+VERIFICATION_SENSOR_CONFIG = SensorConfig.from_preset(SensorPreset.VERIFICATION)

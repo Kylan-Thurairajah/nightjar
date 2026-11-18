@@ -17,6 +17,7 @@ from nightjar.core.provider import GridWorldSimulation, OperationalMode
 from nightjar.core.world import Direction, GridWorld
 from nightjar.tui.drone_identity import (
     DRONE_ICONS,
+    SELECTED_DRONE_COLOR,
     drone_color,
     drone_letter,
     drone_marker,
@@ -51,8 +52,15 @@ def test_animal_and_numeric_markers_keep_exact_two_cell_width(identifier):
 def test_marker_falls_back_when_terminal_width_contract_cannot_be_met(monkeypatch):
     monkeypatch.setitem(DRONE_ICONS, "01", "x")
     assert drone_marker("01") == "01"
-    assert len({drone_color(key) for key in ("01", "02", "03")}) == 1
     assert [drone_letter(key) for key in ("01", "02", "03")] == ["R", "G", "V"]
+
+
+def test_drone_colors_are_distinct_and_selection_remains_visible():
+    assert len({drone_color(key) for key in ("01", "02", "03")}) == 3
+    assert all(
+        drone_color(key, selected=True) == SELECTED_DRONE_COLOR
+        for key in ("01", "02", "03")
+    )
 
 
 def test_animal_map_rows_keep_world_alignment_and_numeric_toggle():

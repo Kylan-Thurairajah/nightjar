@@ -167,9 +167,11 @@ def validate_mission_config(config: MissionConfig) -> tuple[ValidationCheck, ...
     checks.append(
         ValidationCheck(
             "Sensor preset",
-            isinstance(config.sensor_preset, SensorPreset),
+            isinstance(config.sensor_preset, SensorPreset)
+            and config.sensor_preset is not SensorPreset.VERIFICATION,
             "Supported synthetic sensor reliability preset."
             if isinstance(config.sensor_preset, SensorPreset)
+            and config.sensor_preset is not SensorPreset.VERIFICATION
             else "Select a supported sensor reliability preset.",
         )
     )

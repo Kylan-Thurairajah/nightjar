@@ -3,6 +3,15 @@
 Owner approved the user-facing operation direction. Reconcile against final015 code
 before implementation. Demo/blog/restart/replay optimization remain deprioritized.
 
+## Implementation status
+
+The manual verified-discovery slice is implemented locally: public CONTACT at MAP
+probability 0.6 after evidence, F-key exact-cell verification by a MANUAL drone,
+posterior rejection on a miss, terminal confirmation on a match, persistent map/debrief
+marking, and strict version-2 replay validation. Version-1 baseline archives remain
+unchanged. AUTO verifier routing, persistent assignments, task reallocation and typed
+assignment snapshots are still planned; this milestone is not complete.
+
 ## Operational mode and boundaries
 
 Introduce an explicit operational layer for user missions; keep standalone baseline
@@ -30,7 +39,8 @@ not truth. Initial proposed product threshold: MAPprobability>=0.6 after evidenc
 parameter is not a measured optimum. Pin candidate during active verification until
 verified/impossible/unreachable or verifier changes control; reconsider coherently.
 
-Manual F verifies current cell; AUTO verifier travels to candidate and verifies.
+Manual F verification of the candidate cell is implemented; AUTO verifier travel to
+the candidate remains planned.
 Verification consumes one globaltick, no proximity RNG draw. Distinct VERIFICATION
 observation records reliable exactcell presence: radius0,sensitivity1,falsepositive0.
 Reuse Bayesian likelihood normalization: falseverification zeros that cell and logs
@@ -42,11 +52,12 @@ and confirmation milestone are public only after the verified positive observati
 
 ## Replay/model compatibility
 
-MissionSnapshot.operations optionalNone; omit absentfield in version1 encoding to
-preserve exact legacy archives. Version2 operational archives validate assignments,
-phase transitions, geometry/ownership, verification sensorconfig/action/ticks,
-posterior reconstruction, confirmationcause and postterminal behavior. Decode v1
-unchanged. A newkind/config must not simply bypass strict replay validation.
+Version-1 archives preserve the original baseline schema. Implemented verification
+archives use version 2 and validate exact-cell sensor configuration, manual verifier
+eligibility, candidate threshold, action/tick correspondence, posterior reconstruction,
+confirmation cause and post-terminal behavior. The optional operations/assignment
+snapshot and its additional version-2 validation remain planned. New kinds/configs must
+not bypass strict replay validation.
 
 ## Acceptance
 
