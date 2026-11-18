@@ -1,8 +1,12 @@
 # Beacon search demo
 
-The walkthrough is a small, repeatable mission: pilot one drone through the
-Training Facility, let the other two search, and use a scan to update the shared
-evidence map.
+I’ve been playing a lot of Rainbow Six Siege lately, and the recon drones gave me
+the idea for this little search sim. The demo is a fictional intel-gathering
+mission, not a recreation of the game or its maps.
+
+R1 (RAVEN), G2 (GHOST), and V3 (VIPER) are the three virtual drones. You pilot R1
+through the Garage; G2 and V3 search other rooms and add synthetic readings to the
+shared map. The goal is to narrow down where the hidden beacon might be.
 
 The captures use the real Textual UI at **132 columns × 55 rows**, so the map,
 drone telemetry, event log, and replay timeline all fit without scrolling. Maximize
@@ -56,14 +60,14 @@ same seed and interaction sequence.
 
 ## 40-second video storyboard
 
-- **0–5s:** “One hidden beacon. Three drones.” Show the facility and mission goal.
-- **5–13s:** Pilot R1 through the Garage; keep G2 and V3 visible as teammates.
-- **13–21s:** Step the autonomous fleet through the connected rooms.
-- **21–29s:** Scan. Show the positive reading and the map update; caption it “A clue,
-  not proof.”
-- **29–36s:** Enter replay and seek one recorded action.
-- **36–42s:** Close on “A local search simulation. Discovery confirmation is not
-  modeled.”
+- **0–5s:** Introduce the beacon-search simulation and show the facility.
+- **5–13s:** Label R1/RAVEN as pilot-controlled; G2/GHOST and V3/VIPER search
+  autonomously.
+- **13–21s:** Move R1 through the Garage while the other two gather readings.
+- **21–29s:** Show the positive synthetic scan and the shared-map update. Make clear
+  it is a clue, not confirmation.
+- **29–36s:** Replay the run to show where the drones went.
+- **36–42s:** Close with the note that the scenario and sensors are simulated.
 
 ## Deeper engineering
 

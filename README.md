@@ -1,17 +1,21 @@
 # Nightjar
 
-**Find the hidden beacon.**
+I’ve been a little too into Rainbow Six Siege lately, and its recon drones got me
+thinking about how a small team might search a building together. Nightjar is my
+local, terminal-based take on that idea: a fictional facility, a few virtual
+drones, and a shared map for gathering intel.
 
-One pilot. Two autonomous searchers. A shared search.
+In the demo, **R1, G2, and V3 are the drones**: R1 (RAVEN) is the one you pilot;
+G2 (GHOST) and V3 (VIPER) search other rooms on their own. Their movement and
+synthetic scan readings build a picture of the facility and narrow down where the
+hidden beacon might be.
 
-Nightjar is a local drone-search simulation. Fly one virtual drone by hand while
-two teammates search a four-room training facility. Every scan adds a clue to the
-shared map. Replay the mission to see how the search unfolded.
+![A Nightjar demo: R1 is piloted through the Garage while G2 and V3 search other rooms. A positive synthetic scan updates the shared map, then the mission is replayed.](docs/demo/media/beacon-search.gif)
 
-![Nightjar's full-screen beacon-search demo: a pilot and autonomous drones search a training facility, then a positive synthetic scan updates the evidence map.](docs/demo/media/beacon-search.gif)
-
-The beacon and sensors are synthetic. A positive scan is a clue, not a confirmed
-discovery; this version does not control real drones or model target confirmation.
+It’s a small experiment in surveillance-style recon and intel gathering, not a
+real-world surveillance tool. The facility, beacon, and sensors are simulated. A
+positive reading is a clue, not a confirmed discovery; target confirmation isn’t
+modeled yet.
 
 ## Try the mission
 
@@ -45,15 +49,15 @@ pauses it · `R` replays the mission · `B` opens the brief.
 
 For the exact walkthrough and screenshots, see the [demo guide](docs/DEMO.md).
 
-## Why I built it
+## What it shows
 
-- Keep a human pilot in control while autonomous teammates work alongside them.
-- Make uncertain sensor evidence visible as the search changes.
-- Keep each mission inspectable, not just playable, with room coverage and replay.
+- One drone stays under your control while the other two search independently.
+- Scans update the team’s shared picture of where the beacon might be.
+- Replay shows where the drones went and which readings they collected.
 
-## Under the hood
+## More if you’re curious
 
-If you're curious about the engineering behind the console:
+The deeper implementation notes live separately:
 
 - [Architecture and simulation boundaries](docs/ARCHITECTURE.md)
 - [Search policies, metrics, and measured comparisons](docs/BENCHMARKS.md)
