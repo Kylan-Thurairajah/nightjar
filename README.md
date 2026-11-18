@@ -1,7 +1,6 @@
 # Nightjar
 
-I’ve been a little too into Rainbow Six Siege lately, and its recon drones got me
-thinking about how a small team might search a building together. Nightjar is my
+I’ve been enjoying playing Rainbow Six Siege lately on my PC, especially recon drones aspect of it. Nightjar is my
 local, terminal-based take on that idea: a fictional facility, a few virtual
 drones, and a shared map for gathering intel.
 
@@ -13,9 +12,7 @@ hidden beacon might be.
 ![A Nightjar demo: R1 is piloted through the Garage while G2 and V3 search other rooms. A positive synthetic scan updates the shared map, then the mission is replayed.](docs/demo/media/beacon-search.gif)
 
 It’s a small experiment in surveillance-style recon and intel gathering, not a
-real-world surveillance tool. The facility, beacon, and sensors are simulated. A
-positive reading is a clue, not a confirmed discovery; target confirmation isn’t
-modeled yet.
+real-world surveillance tool. The facility, beacon, and sensors are simulated. 
 
 ## Try the mission
 
