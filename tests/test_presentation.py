@@ -121,6 +121,8 @@ def test_summary_coverage_and_entropy_come_from_public_state():
     snapshot = simulation.snapshot()
     assert coverage(snapshot) == 2 / 11
     text = summary_text(snapshot, initial.belief.stats.entropy_bits).plain
+    assert "find the hidden beacon" in text
+    assert "CONFIRMATION NOT MODELED" in text
     assert "(2/11 cells)" in text
     assert "SCANS       1" in text
     assert f"{snapshot.belief.stats.entropy_bits:.3f} bits" in text
@@ -143,6 +145,7 @@ def test_compact_presentation_keeps_bar_legend_map_rows_and_terminal_status_visi
                 strip.text for strip in focus.render_lines(focus.size.region)
             ]
             assert len(focus_lines) == 2
+            assert "FIND HIDDEN BEACON" in focus_lines[0]
             assert "B BRIEF" in focus_lines[0]
             assert "COVERAGE [" in focus_lines[1] and "]" in focus_lines[1]
             legend = app.query_one("#legend", Static)

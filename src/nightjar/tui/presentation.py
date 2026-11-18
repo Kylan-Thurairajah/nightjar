@@ -84,7 +84,7 @@ def summary_text(
         f"{frame.operation_name}  /  {frame.scenario.replace('_', ' ').upper()}\n\n"
     )
     result.append(
-        f"MISSION     {len(frame.drones)} drones / one hidden synthetic objective\n"
+        f"MISSION     {len(frame.drones)} drones / find the hidden beacon\n"
         f"STATE       {status}\n"
         f"TICKS       {frame.tick} / {budget} action ticks\n"
         f"COVERAGE    {coverage(snapshot):.1%}  ({len(visited)}/{traversable} cells)\n"

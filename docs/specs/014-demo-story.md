@@ -1,8 +1,8 @@
-<!-- Owner deferred this slice in favor of field awareness and verified operations. -->
-# Repeatable demo and engineering story - deferred
+# Repeatable demo and engineering story
 
-Reconcile with final013 comparison UI before implementation. Approved direction;
-execution is a separate reviewable slice, not automatic social publication.
+Status: recruiter-facing README, deterministic UI captures, walkthrough, and
+short-form video storyboard delivered 2026-11-18. The longer multi-scene recording
+and optional engineering post remain out of scope.
 
 ## Acceptance
 
@@ -21,5 +21,14 @@ execution is a separate reviewable slice, not automatic social publication.
   recording tooling stays outside app dependencies; adding/installing a new tool
   or publishing to social accounts requires the applicable explicit authorization.
 
-Definition of done: usable repeatable demo inputs, reviewable artifacts/story draft,
-small smoke checks and documented limitations. No remote publish, commit or push.
+## Delivered
+
+- The README now leads with the hidden-beacon mission and a real animated UI capture.
+- [The demo guide](../DEMO.md) records the exact 132 × 55 viewport, mission settings,
+  seed, ordered manual/autonomous interaction sequence, and 40-second video cut.
+- Captures in `docs/demo/media/` come from the Textual app's deterministic UI state.
+- The screen and guide state that readings are synthetic clues and discovery
+  confirmation is not modeled.
+
+The optional engineering post may be developed separately. No social account was
+used and no external content was published.

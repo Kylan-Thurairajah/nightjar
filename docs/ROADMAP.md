@@ -37,7 +37,7 @@ approvals. Preserve current core mathematics and honest presentation of uncertai
 | --- | --- | --- |
 | 012 Mission presentation and debrief | Implemented locally; manual review pending | Named-room original facility, clear brief, scan footprint/evidence, latest fleet intent and accurate debrief; readable at80x24, replay-safe |
 | 013 Matched policy comparison | Implemented locally; manual review pending | Compare real FRONTIER/IG runs under same map/seed/fleet/tick ceiling; show coverage/uncertainty traces and actual stopping reasons; no assumed winner or misleading fair-outcome claim |
-| 014 Repeatable demo and engineering story | Deferred by owner: product first | Deterministic recorded walkthrough, concise captions/storyboard, screenshots/README, reproducible experiment and actual multi-agent development findings; distinguish simulated drones from coding agents; no automatic social publishing |
+| 014 Repeatable demo and engineering story | Recruiter README, deterministic UI GIF/screenshots, and short-form storyboard delivered; engineering post deferred | Human-readable mission story, reproducible walkthrough, truthful evidence and limitations; no automatic social publishing |
 | 015 Field awareness and fleet identity | Implemented locally; 338 tests passed | Animal identities, owner-colored paths, richer facility, room logs/coverage, honest milestones |
 | 016 Coordinated assignments and verified discovery | Next implementation slice | Durable reachable search/verify tasks, reallocation triggers, explicit verification, unmistakable confirmed outcome; public state and replay validation |
 

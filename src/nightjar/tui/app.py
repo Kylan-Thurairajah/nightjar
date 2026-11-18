@@ -507,7 +507,7 @@ class NightjarApp(App[None]):
         phase = (
             "ENDED / B DEBRIEF"
             if frame.status is not MissionStatus.ACTIVE
-            else "1 OBJECTIVE / B BRIEF"
+            else "FIND HIDDEN BEACON / B BRIEF"
         )
         self.query_one("#mission_focus", Static).update(
             Text(
