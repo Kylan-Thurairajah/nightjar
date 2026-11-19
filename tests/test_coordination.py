@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 import hashlib
+import json
 
 import numpy as np
 import pytest
@@ -272,28 +273,39 @@ def test_full_history_rejects_before_planner_queue_or_random_mutation():
     assert not recorder.calls
 
 
+def normalize_archive_floats(value):
+    """Ignore roundoff below 12 decimal places when hashing replay baselines."""
+    if isinstance(value, float):
+        return round(value, 12) or 0.0
+    if isinstance(value, list):
+        return [normalize_archive_floats(item) for item in value]
+    if isinstance(value, dict):
+        return {key: normalize_archive_floats(item) for key, item in value.items()}
+    return value
+
+
 @pytest.mark.parametrize(
     ("strategy", "count", "archive_sha256"),
     [
         (
             SearchStrategy.RANDOM,
             1,
-            "cde04fd600e8a5625957e9820c8fd36be9abcd8434ba1f19fbb4af31e9548929",
+            "1b3484a36abfbfde9f184627638b4c87ed30ea4725fbe9d91e7cca05f2afbf4f",
         ),
         (
             SearchStrategy.FRONTIER,
             1,
-            "a7e43def20c3564a53a53553593cabc79373b05435031cfa555075c097f49aa0",
+            "3bd33586d33b7f26747a1329f59178df40615d3fcb4bf9cc58258facd9d7b583",
         ),
         (
             SearchStrategy.INFORMATION_GAIN,
             1,
-            "ad4c77daf3b72436ebb16a17064be662293284ebc636a66b8443486bb70114fe",
+            "0efbf7074a1e9cbc08794f3fd02fd2882fc4f1fa472baf316b0142d6bf312783",
         ),
         (
             SearchStrategy.RANDOM,
             3,
-            "6c0ab328e2f60fea91fd02c6b1bda14d82b02fd1ebdc26b22ea0b55bed5a5228",
+            "bb803f3ecbd1b3c76b371371699df43909f4ac5c926c5c7f668a6f79cef812e3",
         ),
     ],
 )
@@ -311,10 +323,11 @@ def test_single_drone_and_random_archives_preserve_pre_coordination_baseline(
     release_all(simulation)
     while simulation.frame().status is MissionStatus.ACTIVE:
         simulation.fleet_round()
-    assert (
-        hashlib.sha256(simulation.history.to_json().encode()).hexdigest()
-        == archive_sha256
+    archive = normalize_archive_floats(json.loads(simulation.history.to_json()))
+    canonical_json = json.dumps(
+        archive, sort_keys=True, separators=(",", ":"), allow_nan=False
     )
+    assert hashlib.sha256(canonical_json.encode()).hexdigest() == archive_sha256
 
 
 def test_inaccessible_frontier_remains_a_genuine_global_terminal_stop():

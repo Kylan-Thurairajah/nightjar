@@ -9,10 +9,9 @@ G2 (GHOST), and V3 (VIPER) are virtual drones. The colored trails show where eac
 one has searched; a `?` marks a candidate and `◎` marks a verified beacon. A scan
 is a clue, not a confirmation.
 
-The README preview is a short animated cut of the final search, candidate,
-approach, and verification. It uses the Textual UI at **132 columns × 55 rows**
-so the map, telemetry, controls, and event log fit without scrolling. Click it to
-open the higher-quality MP4.
+The README preview shows the fleet mid-search in AUTO mode. Raven logs a
+positive proximity scan, then the fleet continues exploring. The walkthrough
+below takes you through manual verification.
 
 ## Launch and configure
 
@@ -75,10 +74,8 @@ physical sensors are modeled.
 ## What the clip shows
 
 - The mission-focus panel sets the goal: find the hidden beacon.
-- R1, G2, and V3 search different parts of the facility; their colors and trails
-  show who covered what.
-- A likely cell becomes a candidate, then V3 moves there and checks it.
-- The verified result appears in the live mission-control banner.
+- R1, G2, and V3 explore the facility while the coverage bar tracks progress.
+- Raven's positive proximity scan appears in the event log as a lead.
 
 ## Deeper engineering
 
