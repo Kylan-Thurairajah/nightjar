@@ -9,10 +9,10 @@ G2 (GHOST), and V3 (VIPER) are virtual drones. The colored trails show where eac
 one has searched; a `?` marks a candidate and `◎` marks a verified beacon. A scan
 is a clue, not a confirmation.
 
-The README clip opens after deployment and follows live search through beacon
-verification, with the mission-control screen updating continuously. It uses the
-Textual UI at **132 columns × 55 rows** so the map, telemetry, controls, and event
-log fit without scrolling. It ends on the verification result.
+The README preview is a short animated cut of the final search, candidate,
+approach, and verification. It uses the Textual UI at **132 columns × 55 rows**
+so the map, telemetry, controls, and event log fit without scrolling. Click it to
+open the higher-quality MP4.
 
 ## Launch and configure
 
@@ -47,11 +47,10 @@ On macOS, run the capture script from the repository root:
 ```
 
 The script drives the Textual app with real search, rescan, movement, and
-verification actions in a roughly 28-second H.264 video. It records the deployed
-mission in two-tick increments and enforces a 30-second maximum. It replaces the
-README MP4 and preview image only after a successful verification. The README
-preview opens the playable video. It captures no setup screens or debrief. For
-this compact repeatable walkthrough, it uses the
+verification actions. It keeps a short rolling lead-in, then captures the
+candidate-to-verification sequence, enforcing a 10-second maximum. It replaces
+the README MP4 and looping GIF only after a successful verification. It captures
+no setup screens or debrief. For this compact repeatable walkthrough, it uses the
 high-reliability 98% / 2% proximity model at exact-cell range; the ordinary
 mission preset keeps its wider search radius. The target remains hidden from
 route logic.

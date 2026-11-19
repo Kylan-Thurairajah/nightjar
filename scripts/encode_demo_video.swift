@@ -1,25 +1,22 @@
 import AVFoundation
 import AppKit
 import CoreVideo
-import ImageIO
-import UniformTypeIdentifiers
 
 struct Frame: Decodable {
     let path: String
     let delay: Double
 }
 
-guard CommandLine.arguments.count == 4 else {
-    fatalError("usage: encode_demo_video.swift frames.json output.mp4 poster.png")
+guard CommandLine.arguments.count == 3 else {
+    fatalError("usage: encode_demo_video.swift frames.json output.mp4")
 }
 
 let manifestURL = URL(fileURLWithPath: CommandLine.arguments[1])
 let outputURL = URL(fileURLWithPath: CommandLine.arguments[2])
-let posterURL = URL(fileURLWithPath: CommandLine.arguments[3])
 let frames = try JSONDecoder().decode([Frame].self, from: Data(contentsOf: manifestURL))
 guard !frames.isEmpty else { fatalError("no frames to encode") }
-let outputWidth = 1200
-let outputHeight = 1024
+let outputWidth = 1000
+let outputHeight = 854
 let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
 let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
     AVVideoCodecKey: AVVideoCodecType.h264,
@@ -71,12 +68,6 @@ func resizedImage(from path: String) throws -> CGImage {
     }
     return resized
 }
-
-guard let posterDestination = CGImageDestinationCreateWithURL(
-    posterURL as CFURL, UTType.png.identifier as CFString, 1, nil
-) else { fatalError("could not create PNG poster") }
-CGImageDestinationAddImage(posterDestination, try resizedImage(from: frames[0].path), nil)
-guard CGImageDestinationFinalize(posterDestination) else { fatalError("could not write PNG poster") }
 
 var presentationTime = CMTime.zero
 for frame in frames {
