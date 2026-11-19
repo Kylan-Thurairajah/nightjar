@@ -1,20 +1,27 @@
 # Nightjar
 
-I’ve been enjoying playing Rainbow Six Siege lately on my PC, especially the recon drones aspect of it. Nightjar is my
-local, terminal-based take on that idea: a fictional facility, a few virtual
-drones, and a shared map for gathering intel.
+Nightjar is a local terminal simulation inspired by the recon drones in Rainbow
+Six Siege. Virtual drones explore a fictional facility and share scan readings
+as they search for a hidden beacon.
 
-In the demo, **R1, G2, and V3 are the drones**: R1 (RAVEN) is the one you pilot;
-G2 (GHOST) and V3 (VIPER) search other rooms on their own. Their movement and
-synthetic scan readings build a picture of the facility and narrow down where the
-hidden beacon might be.
+## Watch the search
 
-[![Nightjar’s virtual drones converge on a beacon candidate and verify it from live mission control.](docs/demo/media/beacon-search.gif)](docs/demo/media/beacon-search.mp4)
+The clip joins Raven, Ghost, and Viper mid-mission as they search the Training
+Facility in AUTO mode.
 
-It’s a small experiment in surveillance-style recon and intel gathering, not a
-real-world surveillance tool. The facility, beacon, and sensors are simulated.
-A positive scan is only a lead: pilot to the likely cell and press `F` to check it.
-A match confirms the beacon; a miss rules out that candidate.
+[![Three virtual drones search the Training Facility while Nightjar logs their movements and scans.](docs/demo/media/beacon-search.gif)](docs/demo/media/beacon-search.mp4)
+
+[Watch the full recording (MP4)](docs/demo/media/beacon-search.mp4)
+
+**1. Follow the fleet.** R1, G2, and V3 mark the three drones on the map. The
+coverage bar shows how much of the facility they’ve visited.
+
+![Training Facility map showing Raven, Ghost, Viper, and the coverage bar.](docs/demo/media/facility-search.png)
+
+**2. Spot a lead.** Raven logs a positive proximity scan near the Server Room.
+The fleet keeps searching. Confirming the beacon requires a separate check.
+
+![Mission event log showing Raven’s positive proximity scan.](docs/demo/media/positive-scan.png)
 
 ## Try the mission
 
@@ -39,21 +46,14 @@ py -3.12 -m venv .venv
 
 </details>
 
-In the setup screen, choose **Training Facility**, **Standard**, **3 drones**,
-**Manual**, **Frontier**, **High reliability**, and **seed 6**. Use a full-size
-terminal for the complete map and mission panels.
+For a hands-on mission, choose **Training Facility**, **Standard**, **3 drones**,
+**Manual**, **Frontier**, **High reliability**, and **seed 6**. This setup
+lets you pilot Raven while Ghost and Viper search on their own.
 
 `WASD` moves your drone · `E` scans · `F` verifies a candidate · `N` advances the
 fleet · `Space` runs or pauses it · `R` replays the mission · `B` opens the brief.
 
-For the exact walkthrough and screenshots, see the [demo guide](docs/DEMO.md).
-
-## What it shows
-
-- One drone stays under your control while the other two search independently.
-- Scans update the team’s shared picture of where the beacon might be.
-- A likely spot is just a lead; a separate check confirms the beacon or rules it out.
-- Replay shows where the drones went and which readings they collected.
+For the manual beacon verification walkthrough, see the [demo guide](docs/DEMO.md).
 
 ## More if you’re curious
 
