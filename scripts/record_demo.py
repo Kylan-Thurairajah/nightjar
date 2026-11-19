@@ -35,8 +35,9 @@ os.environ.pop("NO_COLOR", None)
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OUTPUT = ROOT / "docs/demo/media/beacon-search.gif"
-ENCODER = Path(__file__).with_name("encode_demo_gif.swift")
+OUTPUT = ROOT / "docs/demo/media/beacon-search.mp4"
+POSTER = ROOT / "docs/demo/media/beacon-search.png"
+ENCODER = Path(__file__).with_name("encode_demo_video.swift")
 SIZE = (132, 55)
 
 
@@ -119,7 +120,7 @@ async def _record_frames(directory: Path) -> list[dict[str, object]]:
     )
     captured: list[dict[str, object]] = []
 
-    async def capture(pilot, name: str, delay: float) -> None:
+    async def capture(pilot, name: str, delay: float = 0.065) -> None:
         await pilot.pause()
         svg_path = directory / f"{len(captured):02d}-{name}.svg"
         svg_path.write_text(app.export_screenshot(), encoding="utf-8")
@@ -128,33 +129,28 @@ async def _record_frames(directory: Path) -> list[dict[str, object]]:
     async with app.run_test(size=SIZE) as pilot:
         app._mission_timer.pause()
         await app.wait_for_commands()
-        await capture(pilot, "mission-start", 5.0)
+        # Begin only after deployment and a few fleet rounds; the clip should open
+        # in active mission control, never on configuration or a static title view.
+        for _ in range(6):
+            await pilot.press("n")
+            await app.wait_for_commands()
+        await capture(pilot, "deployed", 0.55)
         candidate_captured = False
         sample_captured = False
-        verification_captured = False
-        rejection_captured = False
         rescanned: set[str] = set()
+        last_frame_tick = app._controller.view_snapshot.frame.tick
         for _ in range(config.max_ticks * 3):
             snapshot = app._controller.view_snapshot
             discovery = discovery_state(snapshot)
             if snapshot.frame.status is not MissionStatus.ACTIVE:
                 break
 
-            if not sample_captured and any(
-                item.positive for item in snapshot.observations
-            ):
-                if app.layer != "belief":
-                    await pilot.press("h")
-                    await app.wait_for_commands()
-                await capture(pilot, "positive-intel", 7.0)
-                sample_captured = True
-
             if discovery.candidate_position is not None:
                 if not candidate_captured:
                     if app.layer != "belief":
                         await pilot.press("h")
                         await app.wait_for_commands()
-                    await capture(pilot, "candidate", 8.0)
+                    await capture(pilot, "candidate", 0.6)
                     candidate_captured = True
 
                 await pilot.press("3")
@@ -170,29 +166,15 @@ async def _record_frames(directory: Path) -> list[dict[str, object]]:
                     )
                     route = _path(frame, manual.position, candidate)
                     if route is not None:
-                        halfway = len(route) // 2
-                        for index, key in enumerate(route):
+                        for key in route:
                             await pilot.press(key)
                             await app.wait_for_commands()
-                            if (
-                                not verification_captured
-                                and route
-                                and index + 1 == halfway
-                            ):
-                                await capture(pilot, "moving-to-check", 5.0)
-                                verification_captured = True
+                            await capture(pilot, "approach")
                         await pilot.press("f")
                         await app.wait_for_commands()
                         checked = app._controller.view_snapshot
-                        last = checked.observations[-1]
-                        if not last.positive and not rejection_captured:
-                            await capture(pilot, "candidate-rejected", 4.0)
-                            rejection_captured = True
-                        elif checked.frame.status is MissionStatus.CONFIRMED:
-                            await capture(pilot, "beacon-verified", 8.0)
-                            await pilot.press("b")
-                            await app.wait_for_commands()
-                            await capture(pilot, "mission-debrief", 14.0)
+                        if checked.frame.status is MissionStatus.CONFIRMED:
+                            await capture(pilot, "beacon-verified", 1.0)
                             break
 
             snapshot = app._controller.view_snapshot
@@ -208,6 +190,11 @@ async def _record_frames(directory: Path) -> list[dict[str, object]]:
             )
             if latest_positive is not None:
                 rescanned.add(latest_positive.observation_id)
+                if not sample_captured:
+                    if app.layer != "belief":
+                        await pilot.press("h")
+                        await app.wait_for_commands()
+                    sample_captured = True
                 await pilot.press(latest_positive.drone_id[-1])
                 await app.wait_for_commands()
                 await pilot.press("e")
@@ -215,6 +202,10 @@ async def _record_frames(directory: Path) -> list[dict[str, object]]:
             else:
                 await pilot.press("n")
                 await app.wait_for_commands()
+            snapshot = app._controller.view_snapshot
+            if snapshot.frame.tick - last_frame_tick >= 2:
+                await capture(pilot, "search")
+                last_frame_tick = snapshot.frame.tick
 
         final = app._controller.view_snapshot
         if final.frame.status is not MissionStatus.CONFIRMED:
@@ -226,8 +217,10 @@ async def _record_frames(directory: Path) -> list[dict[str, object]]:
                 f"MAP {final.belief.stats.map_probability:.1%}, "
                 f"phase {state.phase.value})."
             )
-        if len(captured) < 4 or captured[-1]["delay"] != 14.0:
-            raise RuntimeError("The verified mission debrief was not captured.")
+        if len(captured) < 20 or captured[-1]["delay"] != 1.0:
+            raise RuntimeError(
+                "The continuous verified mission sequence was not captured."
+            )
     return captured
 
 
@@ -235,9 +228,15 @@ async def main() -> None:
     with tempfile.TemporaryDirectory(prefix="nightjar-demo-") as temp:
         directory = Path(temp)
         frames = await _record_frames(directory)
+        duration = sum(float(frame["delay"]) for frame in frames)
+        if duration > 30:
+            raise RuntimeError(
+                f"The README walkthrough is {duration:.1f}s; maximum is 30s."
+            )
         manifest = directory / "frames.json"
         manifest.write_text(json.dumps(frames), encoding="utf-8")
-        temporary_output = directory / "beacon-search.gif"
+        temporary_output = directory / "beacon-search.mp4"
+        temporary_poster = directory / "beacon-search.png"
         subprocess.run(
             [
                 "swift",
@@ -248,12 +247,13 @@ async def main() -> None:
                 str(ENCODER),
                 str(manifest),
                 str(temporary_output),
+                str(temporary_poster),
             ],
             check=True,
         )
         OUTPUT.parent.mkdir(parents=True, exist_ok=True)
         temporary_output.replace(OUTPUT)
-    duration = sum(float(frame["delay"]) for frame in frames)
+        temporary_poster.replace(POSTER)
     print(
         f"Recorded {OUTPUT.relative_to(ROOT)} "
         f"({duration:.0f}s across {len(frames)} app states)"

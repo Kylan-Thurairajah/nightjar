@@ -9,7 +9,7 @@ G2 (GHOST) and V3 (VIPER) search other rooms on their own. Their movement and
 synthetic scan readings build a picture of the facility and narrow down where the
 hidden beacon might be.
 
-![Nightjar’s virtual drones gather intel, flag a candidate, verify the beacon, and show the mission debrief.](docs/demo/media/beacon-search.gif)
+[![Watch Nightjar’s virtual drones search a facility, investigate a beacon candidate, and verify it from live mission control.](docs/demo/media/beacon-search.png)](docs/demo/media/beacon-search.mp4)
 
 It’s a small experiment in surveillance-style recon and intel gathering, not a
 real-world surveillance tool. The facility, beacon, and sensors are simulated.

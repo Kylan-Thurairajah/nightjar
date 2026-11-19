@@ -9,10 +9,10 @@ G2 (GHOST), and V3 (VIPER) are virtual drones. The colored trails show where eac
 one has searched; a `?` marks a candidate and `◎` marks a verified beacon. A scan
 is a clue, not a confirmation.
 
-The README clip follows a real, deterministic mission through confirmation. It
-uses the Textual UI at **132 columns × 55 rows** so the map, telemetry, controls,
-event log, and replay status fit without scrolling. Press `B` afterward to see
-the debrief.
+The README clip opens after deployment and follows live search through beacon
+verification, with the mission-control screen updating continuously. It uses the
+Textual UI at **132 columns × 55 rows** so the map, telemetry, controls, and event
+log fit without scrolling. It ends on the verification result.
 
 ## Launch and configure
 
@@ -46,11 +46,15 @@ On macOS, run the capture script from the repository root:
 .venv/bin/python scripts/record_demo.py
 ```
 
-The script drives the Textual app with real search, rescan, and verification
-actions and replaces the README GIF only after it reaches the verified debrief.
-For this compact repeatable walkthrough, the script uses the high-reliability
-98% / 2% proximity model at exact-cell range; the ordinary mission preset keeps
-its wider search radius. The mission target remains hidden from the route logic.
+The script drives the Textual app with real search, rescan, movement, and
+verification actions in a roughly 28-second H.264 video. It records the deployed
+mission in two-tick increments and enforces a 30-second maximum. It replaces the
+README MP4 and preview image only after a successful verification. The README
+preview opens the playable video. It captures no setup screens or debrief. For
+this compact repeatable walkthrough, it uses the
+high-reliability 98% / 2% proximity model at exact-cell range; the ordinary
+mission preset keeps its wider search radius. The target remains hidden from
+route logic.
 
 ## Play the walkthrough
 
@@ -75,7 +79,7 @@ physical sensors are modeled.
 - R1, G2, and V3 search different parts of the facility; their colors and trails
   show who covered what.
 - A likely cell becomes a candidate, then V3 moves there and checks it.
-- The result appears on screen; `B` opens the mission debrief.
+- The verified result appears in the live mission-control banner.
 
 ## Deeper engineering
 
